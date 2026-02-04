@@ -177,6 +177,23 @@
                             </div>
                         </div>
                     </div>
+                    <!-- 포만감/수분 바 -->
+                    <div class="hunger-thirst-bars">
+                        <div class="bar-container hunger-bar-container">
+                            <span class="bar-label">🍖</span>
+                            <div class="bar hunger-bar">
+                                <div class="bar-fill" id="hungerBar" style="width: 100%; background: linear-gradient(90deg, #e67e22, #f39c12);"></div>
+                                <span class="bar-text" id="hungerText">100%</span>
+                            </div>
+                        </div>
+                        <div class="bar-container thirst-bar-container">
+                            <span class="bar-label">💧</span>
+                            <div class="bar thirst-bar">
+                                <div class="bar-fill" id="thirstBar" style="width: 100%; background: linear-gradient(90deg, #3498db, #5dade2);"></div>
+                                <span class="bar-text" id="thirstText">100%</span>
+                            </div>
+                        </div>
+                    </div>
                     <!-- 경험치 & 플레이 시간 (상단 왼쪽으로 이동) -->
                     <div class="player-exp-time">
                         <span>📊 EXP: <span id="expDisplay">0</span>/<span id="expRequiredDisplay">100</span></span>
@@ -187,6 +204,7 @@
                     <div class="location-info">
                         <span class="current-map" id="currentMapName">훈련장</span>
                         <span class="game-time" id="gameTimeDisplay">☀️ Day 1 - 08:00</span>
+                        <span class="weather-info" id="weatherDisplay" title="현재 날씨">☀️ 맑음</span>
                     </div>
                 </div>
                 <div class="header-right">
@@ -216,16 +234,9 @@
                     <!-- 전투 UI (전투 시 표시) -->
                     <div id="battleUI" class="battle-ui hidden">
                         <div class="battle-arena">
-                            <!-- 몬스터 -->
-                            <div class="monster-section">
-                                <div class="monster-sprite" id="monsterSprite">👹</div>
-                                <div class="monster-info">
-                                    <span class="monster-name" id="monsterName">몬스터</span>
-                                    <div class="bar monster-hp-bar">
-                                        <div class="bar-fill" id="monsterHpBar" style="width: 100%;"></div>
-                                        <span class="bar-text" id="monsterHpText">100/100</span>
-                                    </div>
-                                </div>
+                            <!-- 다중 몬스터 컨테이너 -->
+                            <div class="monsters-container" id="monstersContainer">
+                                <!-- 몬스터 카드들이 동적으로 생성됩니다 -->
                             </div>
                         </div>
                     </div>

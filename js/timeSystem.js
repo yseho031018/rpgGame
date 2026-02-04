@@ -335,6 +335,102 @@ function addGameTime(minutes) {
 }
 
 // ============================================
+// 🌦️ 날씨 시스템
+// ============================================
+
+let currentWeather = 'sunny';  // 현재 날씨
+let lastWeatherChange = Date.now();  // 마지막 날씨 변경 시간
+
+/**
+ * 랜덤으로 날씨를 변경합니다.
+ */
+function updateWeather() {
+    // SPECIAL_EVENTS가 없으면 맑음 유지
+    if (typeof SPECIAL_EVENTS === 'undefined') {
+        currentWeather = 'sunny';
+        return 'sunny';
+    }
+
+    const roll = Math.random();
+    let cumulative = 0;
+
+    for (const [weatherId, weatherData] of Object.entries(SPECIAL_EVENTS)) {
+        // 붉은 달은 밤에만 발생
+        if (weatherId === 'blood_moon' && !isNight()) {
+            continue;
+        }
+        
+        cumulative += weatherData.chance || 0;
+        if (roll < cumulative) {
+            currentWeather = weatherId;
+            lastWeatherChange = Date.now();
+            updateWeatherUI();
+            
+            if (typeof addGameLog === 'function' && weatherData.name) {
+                addGameLog(`${weatherData.icon} 날씨가 '${weatherData.name}'(으)로 변했습니다!`);
+            }
+            
+            return weatherId;
+        }
+    }
+
+    currentWeather = 'sunny';
+    updateWeatherUI();
+    return 'sunny';
+}
+
+/**
+ * 현재 날씨 정보를 반환합니다.
+ * @returns {Object} - 현재 날씨 데이터
+ */
+function getCurrentWeather() {
+    if (typeof SPECIAL_EVENTS === 'undefined') {
+        return { id: 'sunny', name: '맑음', icon: '☀️', effects: {} };
+    }
+    return SPECIAL_EVENTS[currentWeather] || SPECIAL_EVENTS.sunny || { id: 'sunny', name: '맑음', icon: '☀️', effects: {} };
+}
+
+/**
+ * 현재 날씨의 효과를 반환합니다.
+ * @returns {Object} - 날씨 효과 객체
+ */
+function getWeatherEffects() {
+    const weather = getCurrentWeather();
+    return weather.effects || {};
+}
+
+/**
+ * 날씨 UI를 업데이트합니다.
+ */
+function updateWeatherUI() {
+    const weather = getCurrentWeather();
+    const weatherDisplay = document.getElementById('weatherDisplay');
+    
+    if (weatherDisplay) {
+        weatherDisplay.textContent = `${weather.icon} ${weather.name}`;
+        weatherDisplay.title = weather.description || '';
+    }
+}
+
+/**
+ * 날씨 시스템을 시작합니다.
+ */
+function startWeatherSystem() {
+    // 초기 날씨 설정
+    updateWeather();
+    
+    // 5분(게임 내 약 1시간)마다 날씨 변경 가능
+    setInterval(() => {
+        // 30% 확률로 날씨 변경
+        if (Math.random() < 0.3) {
+            updateWeather();
+        }
+    }, 5 * 60 * 1000);
+    
+    console.log('🌦️ 날씨 시스템 시작!');
+}
+
+// ============================================
 // 🔊 콘솔 로그
 // ============================================
 

@@ -282,8 +282,31 @@ function moveToLocation(locationId) {
         return false;
     }
 
+    // 보스방 진입 경고 체크
+    const targetLoc = map.locations[resolvedLocationId];
+    if (targetLoc && targetLoc.isBossArea) {
+        // 첫 진입 여부 확인
+        const bossKey = `${map.id}_${resolvedLocationId}_boss_warned`;
+        if (!player.bossWarnings) player.bossWarnings = {};
+        
+        if (!player.bossWarnings[bossKey]) {
+            // 경고 모달 표시
+            showBossWarningModal(targetLoc, resolvedLocationId, map.id, bossKey);
+            return false; // 모달에서 확인 후 다시 이동
+        }
+    }
+
+    // 실제 이동 실행
+    return executeLocationMove(resolvedLocationId);
+}
+
+/**
+ * 실제 위치 이동을 실행합니다.
+ */
+function executeLocationMove(resolvedLocationId) {
     currentLocationId = resolvedLocationId;
     const newLoc = getCurrentLocation();
+    const map = getCurrentMap();
 
     // 갈림길에 도착하면 랜덤 경로 셔플
     if (newLoc && newLoc.isRandomCrossroads) {
@@ -299,7 +322,212 @@ function moveToLocation(locationId) {
     updateLocationUI();
     addGameLog(`🚶 ${newLoc.name}(으)로 이동했습니다.`);
 
+    // 보스방 진입 시 보스 대화 및 전투 시작
+    if (newLoc && newLoc.isBossArea && newLoc.bossMonster) {
+        setTimeout(() => {
+            showBossEncounter(newLoc);
+        }, 500);
+    }
+
     return true;
+}
+
+/**
+ * 보스방 진입 경고 모달을 표시합니다.
+ */
+function showBossWarningModal(targetLoc, locationId, mapId, bossKey) {
+    // 기존 모달 제거
+    const existingModal = document.querySelector('.boss-warning-modal');
+    if (existingModal) existingModal.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'boss-warning-modal';
+    
+    overlay.innerHTML = `
+        <div class="boss-warning-content">
+            <div class="boss-warning-icon">⚠️</div>
+            <h2 class="boss-warning-title">위험 경고!</h2>
+            <p class="boss-warning-text">
+                강력한 기운이 느껴집니다...<br>
+                <strong>${targetLoc.name}</strong>에는 매우 강력한 적이 기다리고 있습니다.
+            </p>
+            <p class="boss-warning-desc">정말 진입하시겠습니까?</p>
+            <div class="boss-warning-buttons">
+                <button class="boss-warning-btn confirm" onclick="confirmBossEntry('${locationId}', '${bossKey}')">
+                    ⚔️ 진입한다
+                </button>
+                <button class="boss-warning-btn cancel" onclick="cancelBossEntry()">
+                    🔙 돌아간다
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    addGameLog('⚠️ 위험한 기운이 느껴집니다...');
+}
+
+/**
+ * 보스방 진입을 확정합니다.
+ */
+function confirmBossEntry(locationId, bossKey) {
+    // 모달 제거
+    const modal = document.querySelector('.boss-warning-modal');
+    if (modal) modal.remove();
+
+    // 경고 확인 기록
+    if (!player.bossWarnings) player.bossWarnings = {};
+    player.bossWarnings[bossKey] = true;
+
+    addGameLog('💀 위험을 감수하고 진입합니다...');
+
+    // 실제 이동 실행
+    executeLocationMove(locationId);
+}
+
+/**
+ * 보스방 진입을 취소합니다.
+ */
+function cancelBossEntry() {
+    const modal = document.querySelector('.boss-warning-modal');
+    if (modal) modal.remove();
+
+    addGameLog('🔙 발걸음을 돌립니다.');
+}
+
+/**
+ * 보스 조우 대화를 표시하고 전투를 시작합니다.
+ */
+function showBossEncounter(location) {
+    const bossType = location.bossMonster;
+    const bossData = MONSTERS[bossType];
+    
+    if (!bossData) {
+        console.error('보스 데이터 없음:', bossType);
+        startBattle([bossType]);
+        return;
+    }
+
+    // 보스 대화 데이터
+    const bossDialogues = {
+        cursed_lord: {
+            name: '저주받은 영주',
+            emoji: '👻',
+            lines: [
+                '오호... 누가 내 저택에 감히 발을 들였나?',
+                '네 영혼도 내 신하로 삼아주마!',
+                '죽음을 맞이할 준비가 되었느냐!'
+            ]
+        },
+        forest_guardian: {
+            name: '숲의 수호자',
+            emoji: '🌳',
+            lines: [
+                '이 숲의 심장부에 침입하다니...',
+                '자연을 모독한 죄, 용서치 않겠다!',
+                '숲의 분노를 느껴보아라!'
+            ]
+        },
+        ancient_golem: {
+            name: '고대 골렘',
+            emoji: '🗿',
+            lines: [
+                '... 침입자 감지...',
+                '... 고대의 명령... 수호 임무 수행...',
+                '... 제거 시작...'
+            ]
+        },
+        demon_archduke: {
+            name: '악마 대공',
+            emoji: '😈',
+            lines: [
+                '크크크... 어린 모험가가 여기까지 왔군.',
+                '네 영혼은 훌륭한 연료가 될 것이다!',
+                '자, 춤을 시작하지!'
+            ]
+        },
+        dragon_lord: {
+            name: '드래곤 로드',
+            emoji: '🐉',
+            lines: [
+                '감히 내 둥지에 발을 들이다니...',
+                '수천 년 동안 이런 대담한 자는 처음이로군.',
+                '재가 되어 바람에 흩어져라!'
+            ]
+        },
+        demon_king: {
+            name: '마왕',
+            emoji: '👿',
+            lines: [
+                '후후... 드디어 왔군, 용사여.',
+                '네가 여기까지 올 줄 알고 있었다.',
+                '이 세상의 멸망을 눈으로 보게 해주마!'
+            ]
+        }
+    };
+
+    // 기본 대화 (데이터에 없는 보스용)
+    const defaultDialogue = {
+        name: bossData.name,
+        emoji: bossData.emoji || '👹',
+        lines: [
+            '감히 이곳에 발을 들이다니...',
+            '네 용기는 인정하마. 하지만 그것이 끝이다!',
+            '덤벼라, 모험가!'
+        ]
+    };
+
+    const dialogue = bossDialogues[bossType] || defaultDialogue;
+    
+    showBossDialogSequence(dialogue, bossType);
+}
+
+/**
+ * 보스 대화 시퀀스를 표시합니다.
+ */
+function showBossDialogSequence(dialogue, bossType) {
+    let currentLine = 0;
+
+    function showNextLine() {
+        // 기존 대화 모달 제거
+        const existing = document.querySelector('.boss-dialog-modal');
+        if (existing) existing.remove();
+
+        if (currentLine >= dialogue.lines.length) {
+            // 대화 종료, 전투 시작
+            addGameLog(`⚔️ ${dialogue.name}과(와)의 전투 시작!`);
+            startBattle([bossType]);
+            return;
+        }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'boss-dialog-modal';
+        
+        overlay.innerHTML = `
+            <div class="boss-dialog-content">
+                <div class="boss-dialog-portrait">${dialogue.emoji}</div>
+                <div class="boss-dialog-box">
+                    <div class="boss-dialog-name">${dialogue.name}</div>
+                    <div class="boss-dialog-text">${dialogue.lines[currentLine]}</div>
+                </div>
+                <div class="boss-dialog-continue" onclick="continueBossDialog()">
+                    ${currentLine < dialogue.lines.length - 1 ? '▶ 다음' : '⚔️ 전투 시작!'}
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(overlay);
+        addGameLog(`${dialogue.emoji} ${dialogue.name}: "${dialogue.lines[currentLine]}"`);
+        
+        currentLine++;
+        
+        // 전역 함수로 다음 대화 진행
+        window.continueBossDialog = function() {
+            showNextLine();
+        };
+    }
+
+    showNextLine();
 }
 
 // ============================================
@@ -699,6 +927,7 @@ function executeAction(actionId) {
 
 /**
  * 현재 위치에서 전투를 시작합니다.
+ * 다중 몬스터 조우 시스템 적용 (ENCOUNTER_CONFIG 확률 기반)
  */
 function startLocationBattle() {
     const location = getCurrentLocation();
@@ -717,13 +946,44 @@ function startLocationBattle() {
         return;
     }
 
-    // 랜덤 몬스터 선택
-    const randomMonsterType = monsters[Math.floor(Math.random() * monsters.length)];
-
-    // 전투 시작
-    if (typeof startBattle === 'function') {
-        startBattle(randomMonsterType);
+    // 몬스터 수 결정 (확률 기반)
+    const monsterCount = determineMonsterCount();
+    
+    // 해당 수만큼 몬스터 선택
+    const selectedMonsters = [];
+    for (let i = 0; i < monsterCount; i++) {
+        const randomMonsterType = monsters[Math.floor(Math.random() * monsters.length)];
+        selectedMonsters.push(randomMonsterType);
     }
+
+    // 다중 몬스터 전투 시작
+    if (typeof startBattle === 'function') {
+        startBattle(selectedMonsters);
+    }
+}
+
+/**
+ * ENCOUNTER_CONFIG 확률에 따라 조우할 몬스터 수를 결정합니다.
+ * @returns {number} 조우할 몬스터 수
+ */
+function determineMonsterCount() {
+    // ENCOUNTER_CONFIG가 없으면 기본 1마리
+    if (typeof ENCOUNTER_CONFIG === 'undefined' || !ENCOUNTER_CONFIG.monsterCountChances) {
+        return 1;
+    }
+
+    const roll = Math.random();
+    let cumulative = 0;
+
+    for (const entry of ENCOUNTER_CONFIG.monsterCountChances) {
+        cumulative += entry.chance;
+        if (roll < cumulative) {
+            return entry.count;
+        }
+    }
+
+    // 기본값 (확률 합계가 1이 아닐 경우 대비)
+    return 1;
 }
 
 /**

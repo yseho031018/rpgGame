@@ -700,12 +700,26 @@ function giveStartingEquipment(equipmentIds) {
 function initGameScreen() {
     if (!player) return;
 
+    // 시작 시 HP/MP를 최대치로 설정
+    player.hp = player.maxHp;
+    player.mp = player.maxMp;
+
     // 시간 시스템 시작
     if (typeof resetGameTime === 'function') {
         resetGameTime(8);
     }
     if (typeof startTimeSystem === 'function') {
         startTimeSystem();
+    }
+
+    // 배고픔/수분 시스템 시작
+    if (typeof startHungerSystem === 'function') {
+        startHungerSystem();
+    }
+
+    // 날씨 시스템 시작
+    if (typeof startWeatherSystem === 'function') {
+        startWeatherSystem();
     }
 
     // 맵 초기화

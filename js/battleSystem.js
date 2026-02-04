@@ -27,34 +27,47 @@ let battleState = {
 
 /**
  * 전투를 시작합니다.
- * @param {string} monsterType - 몬스터 타입 ID
+ * @param {string|Array<string>} monsterTypes - 몬스터 타입 ID 또는 몬스터 타입 ID 배열
  */
-function startBattle(monsterType) {
-    console.log('🎮 startBattle 호출:', monsterType);
+function startBattle(monsterTypes) {
+    console.log('🎮 startBattle 호출:', monsterTypes);
 
     if (battleState.inBattle) {
         console.log('이미 전투 중입니다!');
         return;
     }
 
-    // 몬스터 생성
-    const monster = createBattleMonster(monsterType);
-    if (!monster) {
-        console.error('몬스터 생성 실패:', monsterType);
+    // 배열이 아니면 배열로 변환 (하위 호환성)
+    const monsterTypeArray = Array.isArray(monsterTypes) ? monsterTypes : [monsterTypes];
+    
+    // 몬스터들 생성
+    const monsters = [];
+    for (const monsterType of monsterTypeArray) {
+        const monster = createBattleMonster(monsterType);
+        if (monster) {
+            monsters.push(monster);
+        }
+    }
+
+    if (monsters.length === 0) {
+        console.error('몬스터 생성 실패:', monsterTypes);
         return;
     }
 
-    // 보스 몬스터면 도주 불가
-    const canEscape = !monster.isBoss;
+    // 보스 몬스터가 있으면 도주 불가
+    const hasBoss = monsters.some(m => m.isBoss);
 
     battleState = {
         inBattle: true,
         turn: 'player',
-        currentMonster: monster,
+        monsters: monsters,           // 모든 몬스터 배열
+        currentMonster: monsters[0],  // 현재 타겟 몬스터 (첫 번째)
+        currentMonsterIndex: 0,       // 현재 타겟 인덱스
         isDefending: false,
-        canEscape: canEscape,
+        canEscape: !hasBoss,
         turnCount: 1,
-        monsterStatusEffects: {}  // 상태이상 초기화
+        monsterStatusEffects: {},     // 상태이상 초기화
+        playerStatusEffects: []       // 플레이어 상태이상
     };
 
     // 스킬 쿨다운 초기화
@@ -68,10 +81,20 @@ function startBattle(monsterType) {
     showBattleUI();
     updateBattleUI();
 
-    if (monster.isBoss) {
-        addGameLog(`🔥 보스 ${monster.name}과(와) 전투 시작! (도주 불가)`);
+    // 조우 메시지
+    if (monsters.length === 1) {
+        if (hasBoss) {
+            addGameLog(`🔥 보스 ${monsters[0].name}과(와) 전투 시작! (도주 불가)`);
+        } else {
+            addGameLog(`⚔️ ${monsters[0].name}과(와) 전투 시작!`);
+        }
     } else {
-        addGameLog(`⚔️ ${monster.name}과(와) 전투 시작!`);
+        const monsterNames = monsters.map(m => m.name).join(', ');
+        if (hasBoss) {
+            addGameLog(`🔥 ${monsters.length}마리의 몬스터와 전투 시작! (${monsterNames}) [도주 불가]`);
+        } else {
+            addGameLog(`⚔️ ${monsters.length}마리의 몬스터와 전투 시작! (${monsterNames})`);
+        }
     }
 
     console.log('⚔️ 전투 시작 완료, battleState:', battleState);
@@ -151,18 +174,30 @@ function createBattleMonster(monsterType) {
  */
 function endBattle(result) {
     const monster = battleState.currentMonster;
+    const monsters = battleState.monsters || [monster]; // 다중 몬스터 또는 단일 몬스터
     console.log('🏁 endBattle 호출:', result);
 
     switch (result) {
         case 'victory':
-            // 보상 지급
-            const expGained = monster.exp;
-            const goldGained = monster.gold;
+            // 모든 몬스터 보상 합산
+            let totalExp = 0;
+            let totalGold = 0;
+            
+            for (const m of monsters) {
+                if (m) {
+                    totalExp += m.exp || 0;
+                    totalGold += m.gold || 0;
+                }
+            }
 
-            gold += goldGained;
-            player.exp = (player.exp || 0) + expGained;
+            gold += totalGold;
+            player.exp = (player.exp || 0) + totalExp;
 
-            addGameLog(`🎉 승리! ${expGained} EXP, ${goldGained} Gold 획득!`);
+            if (monsters.length > 1) {
+                addGameLog(`🎉 승리! ${monsters.length}마리 처치! ${totalExp} EXP, ${totalGold} Gold 획득!`);
+            } else {
+                addGameLog(`🎉 승리! ${totalExp} EXP, ${totalGold} Gold 획득!`);
+            }
 
             // 레벨업 체크
             checkLevelUp();
@@ -185,8 +220,8 @@ function endBattle(result) {
                 // 훈련장처럼 사망하지 않는 지역
                 handleNoDeathZoneDefeat(currentMapData, monster);
             } else {
-                // 일반 사망 처리 (나중에 구현)
-                addGameLog('⚰️ 안식을 취합니다...');
+                // 일반 사망 처리 - 게임오버 화면으로 이동
+                showGameOverScreen();
             }
             break;
 
@@ -208,6 +243,50 @@ function endBattle(result) {
     // 전투 UI 숨기기
     hideBattleUI();
     updatePlayerUI();
+}
+
+/**
+ * 게임오버 화면을 표시합니다.
+ */
+function showGameOverScreen() {
+    // 게임 데이터 저장 (게임오버 화면에서 사용)
+    const gameOverData = {
+        playerName: player.name,
+        level: player.level,
+        job: player.jobData?.name || '모험가',
+        playTime: getPlayTimeString ? getPlayTimeString() : '00:00:00',
+        gold: gold || 0,
+        lastLocation: player.lastDefeat?.locationName || '알 수 없는 장소',
+        lastMonster: player.lastDefeat?.monster || '알 수 없는 적'
+    };
+    
+    // sessionStorage에 데이터 저장
+    sessionStorage.setItem('gameOverData', JSON.stringify(gameOverData));
+    
+    // 페이드 아웃 효과 후 이동
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: #000;
+        opacity: 0;
+        z-index: 99999;
+        transition: opacity 1s ease;
+    `;
+    document.body.appendChild(overlay);
+    
+    // 페이드 인
+    setTimeout(() => {
+        overlay.style.opacity = '1';
+    }, 100);
+    
+    // 페이지 이동
+    setTimeout(() => {
+        window.location.href = 'gameresult/gameover.html';
+    }, 1500);
 }
 
 /**
@@ -389,21 +468,57 @@ function doBattleAttack() {
     }
 
     const monster = battleState.currentMonster;
-    const damage = calculateDamage(player, monster, false);
+    if (!monster || monster.hp <= 0) {
+        // 자동으로 다음 생존 몬스터 선택
+        if (!selectNextAliveMonster()) {
+            endBattle('victory');
+            return;
+        }
+    }
 
-    monster.hp -= damage;
-    addGameLog(`⚔️ ${player.name}의 공격! ${damage} 데미지!`);
+    const targetMonster = battleState.currentMonster;
+    const damage = calculateDamage(player, targetMonster, false);
+
+    targetMonster.hp -= damage;
+    addGameLog(`⚔️ ${player.name}의 공격! ${targetMonster.name}에게 ${damage} 데미지!`);
 
     // 몬스터 처치 확인
-    if (monster.hp <= 0) {
-        monster.hp = 0;
-        updateBattleUI();
-        setTimeout(() => endBattle('victory'), 500);
-        return;
+    if (targetMonster.hp <= 0) {
+        targetMonster.hp = 0;
+        addGameLog(`💀 ${targetMonster.name}을(를) 처치했습니다!`);
+        
+        // 모든 몬스터 처치 확인
+        const aliveMonsters = battleState.monsters.filter(m => m.hp > 0);
+        if (aliveMonsters.length === 0) {
+            updateBattleUI();
+            setTimeout(() => endBattle('victory'), 500);
+            return;
+        }
+        
+        // 다음 생존 몬스터로 자동 타겟 변경
+        selectNextAliveMonster();
     }
 
     updateBattleUI();
     endPlayerTurn();
+}
+
+/**
+ * 다음 생존 몬스터를 자동 선택합니다.
+ * @returns {boolean} 생존 몬스터가 있으면 true
+ */
+function selectNextAliveMonster() {
+    const monsters = battleState.monsters || [];
+    
+    for (let i = 0; i < monsters.length; i++) {
+        if (monsters[i].hp > 0) {
+            battleState.currentMonsterIndex = i;
+            battleState.currentMonster = monsters[i];
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 /**
@@ -511,6 +626,16 @@ function useSelectedSkill(skillId) {
     player.skillCooldowns[skillId] = skill.cooldown || 0;
 
     const monster = battleState.currentMonster;
+    
+    // 현재 타겟이 없거나 죽었으면 다음 타겟 선택
+    if (!monster || monster.hp <= 0) {
+        if (!selectNextAliveMonster()) {
+            endBattle('victory');
+            return;
+        }
+    }
+    
+    const targetMonster = battleState.currentMonster;
 
     // 스킬 효과 적용
     const damageType = skill.damageType || player.jobData?.damageType || 'physical';
@@ -530,34 +655,43 @@ function useSelectedSkill(skillId) {
         let damage = Math.round(baseAtk * (damagePercent / 100) * multiplier);
 
         // 방어력 적용
-        const defStat = damageType === 'magical' ? (monster.mDef || 0) : (monster.pDef || monster.def || 0);
+        const defStat = damageType === 'magical' ? (targetMonster.mDef || 0) : (targetMonster.pDef || targetMonster.def || 0);
         damage = Math.max(1, damage - Math.floor(defStat * 0.3));
 
         totalDamage += damage;
-        monster.hp -= damage;
+        targetMonster.hp -= damage;
 
         if (attackCount > 1) {
-            addGameLog(`⚡ ${skill.name} ${i + 1}타! ${damage} ${damageType === 'magical' ? '마법' : '물리'} 데미지!`);
+            addGameLog(`⚡ ${skill.name} ${i + 1}타! ${targetMonster.name}에게 ${damage} ${damageType === 'magical' ? '마법' : '물리'} 데미지!`);
         }
     }
 
     if (attackCount === 1) {
-        addGameLog(`⚡ ${player.name}의 ${skill.name}! ${totalDamage} ${damageType === 'magical' ? '마법' : '물리'} 데미지!`);
+        addGameLog(`⚡ ${player.name}의 ${skill.name}! ${targetMonster.name}에게 ${totalDamage} ${damageType === 'magical' ? '마법' : '물리'} 데미지!`);
     } else {
         addGameLog(`💥 총 ${totalDamage} 데미지!`);
     }
 
     // 상태이상 적용
     if (skill.effects?.statusEffect) {
-        applyStatusEffect(monster, skill.effects.statusEffect, skill.effects.statusDuration, totalDamage);
+        applyStatusEffect(targetMonster, skill.effects.statusEffect, skill.effects.statusDuration, totalDamage);
     }
 
     // 몬스터 처치 확인
-    if (monster.hp <= 0) {
-        monster.hp = 0;
-        updateBattleUI();
-        setTimeout(() => endBattle('victory'), 500);
-        return;
+    if (targetMonster.hp <= 0) {
+        targetMonster.hp = 0;
+        addGameLog(`💀 ${targetMonster.name}을(를) 처치했습니다!`);
+        
+        // 모든 몬스터 처치 확인
+        const aliveMonsters = battleState.monsters.filter(m => m.hp > 0);
+        if (aliveMonsters.length === 0) {
+            updateBattleUI();
+            setTimeout(() => endBattle('victory'), 500);
+            return;
+        }
+        
+        // 다음 생존 몬스터로 자동 타겟 변경
+        selectNextAliveMonster();
     }
 
     updateBattleUI();
@@ -649,6 +783,77 @@ function processMonsterStatusEffects(monster) {
 }
 
 /**
+ * 몬스터가 혼란 상태인지 확인합니다. (지속시간은 감소하지 않음)
+ */
+function checkMonsterConfusion(monster) {
+    if (!battleState.monsterStatusEffects) return false;
+    
+    const effects = battleState.monsterStatusEffects[monster.name];
+    if (!effects || !effects.confusion) return false;
+    
+    return effects.confusion.duration > 0;
+}
+
+/**
+ * 몬스터 공격 후 상태이상 처리 (피해 및 지속시간 감소)
+ */
+function processMonsterStatusEffectsAfterAttack(monster) {
+    if (!battleState.monsterStatusEffects) return;
+    
+    const effects = battleState.monsterStatusEffects[monster.name];
+    if (!effects) return;
+
+    const effectsToRemove = [];
+
+    Object.entries(effects).forEach(([effectId, effectData]) => {
+        const effectInfo = STATUS_EFFECTS[effectId];
+        if (!effectInfo || effectData.duration <= 0) {
+            effectsToRemove.push(effectId);
+            return;
+        }
+
+        let damage = 0;
+
+        // 효과별 처리 (공격 후 데미지 적용)
+        switch (effectId) {
+            case 'bleed': // 출혈: 최대HP의 4% 피해 (방어 무시)
+                damage = Math.max(1, Math.round(monster.maxHp * (effectInfo.effects.hpPercent / 100)));
+                monster.hp -= damage;
+                addGameLog(`🩸 ${monster.name}이(가) 출혈로 ${damage} 피해!`);
+                break;
+
+            case 'burn': // 화상: 받은 피해의 20% 마법 피해
+                damage = Math.max(1, Math.round(effectData.damage * (effectInfo.effects.damagePercent / 100)));
+                monster.hp -= damage;
+                addGameLog(`🔥 ${monster.name}이(가) 화상으로 ${damage} 피해!`);
+                break;
+
+            case 'confusion': // 혼란: 공격 후 지속시간 감소
+                // 공격 후에 지속시간 감소 (공격을 했으므로)
+                break;
+        }
+
+        // 지속시간 감소 (공격 후)
+        effectData.duration--;
+
+        if (effectData.duration <= 0) {
+            effectsToRemove.push(effectId);
+            addGameLog(`💨 ${monster.name}의 ${effectInfo.name} 효과가 사라졌다!`);
+        }
+
+        // 상태이상으로 처치 확인
+        if (monster.hp <= 0) {
+            monster.hp = 0;
+        }
+    });
+
+    // 만료된 효과 제거
+    effectsToRemove.forEach(effectId => {
+        delete effects[effectId];
+    });
+}
+
+/**
  * 방어
  */
 function doBattleDefend() {
@@ -712,7 +917,7 @@ function doBattleEscape() {
 // ============================================
 
 /**
- * 몬스터 턴을 실행합니다.
+ * 몬스터 턴을 실행합니다. (다중 몬스터 순차 공격)
  */
 function doMonsterTurn() {
     console.log('👹 doMonsterTurn 호출, battleState:', battleState);
@@ -722,50 +927,95 @@ function doMonsterTurn() {
         return;
     }
 
-    const monster = battleState.currentMonster;
-    if (!monster) {
-        console.log('몬스터가 없음');
+    const monsters = battleState.monsters || [];
+    const aliveMonsters = monsters.filter(m => m.hp > 0);
+    
+    if (aliveMonsters.length === 0) {
+        console.log('생존 몬스터 없음');
+        endBattle('victory');
         return;
     }
 
-    // === 몬스터에게 상태이상 피해 적용 ===
-    processMonsterStatusEffects(monster);
-
-    // 회피 체크
-    const evasionRoll = Math.random() * 100;
-    if (evasionRoll < (player.evasion || 0)) {
-        addGameLog(`💫 ${player.name}이(가) 공격을 회피했다!`);
-    } else {
-        // 몬스터 공격 (피해 타입 적용)
-        const damageType = monster.damageType || 'physical';
-        let damage = calculateMonsterDamage(monster, player, damageType);
-
-        // 방어 중이면 데미지 감소 (방어력 2.5~3.5배 증가 효과)
-        if (battleState.isDefending) {
-            const defenseMultiplier = 2.5 + Math.random(); // 2.5 ~ 3.5배
-            // 피해 타입에 맞는 방어력 사용
-            const baseDef = damageType === 'magical' ?
-                (player.mDef || 0) + (player.bonusMDef || 0) :
-                (player.pDef || 0) + (player.bonusPDef || 0);
-            const additionalDef = Math.floor(baseDef * defenseMultiplier);
-            damage = Math.max(1, damage - additionalDef);
-            addGameLog(`🛡️ 방어로 데미지 ${additionalDef} 감소!`);
+    // 모든 생존 몬스터가 순차적으로 공격
+    let attackIndex = 0;
+    
+    function nextMonsterAttack() {
+        if (attackIndex >= aliveMonsters.length) {
+            // 모든 몬스터 공격 완료
+            finishMonsterTurn();
+            return;
         }
+        
+        const monster = aliveMonsters[attackIndex];
+        
+        // 혼란 상태 체크 - 공격 전에 확인, 지속시간 감소는 공격 후
+        const isConfused = checkMonsterConfusion(monster);
+        
+        if (isConfused) {
+            // 혼란 상태면 공격 대신 자해 또는 혼란 행동
+            const selfDamage = Math.floor(monster.maxHp * 0.05);
+            monster.hp = Math.max(1, monster.hp - selfDamage);
+            addGameLog(`😵 ${monster.name}은(는) 혼란스러워 자신을 공격했다! (${selfDamage} 데미지)`);
+        } else {
+            // 회피 체크
+            const evasionRoll = Math.random() * 100;
+            if (evasionRoll < (player.evasion || 0)) {
+                addGameLog(`💫 ${player.name}이(가) ${monster.name}의 공격을 회피했다!`);
+            } else {
+                // 몬스터 공격 (피해 타입 적용)
+                const damageType = monster.damageType || 'physical';
+                let damage = calculateMonsterDamage(monster, player, damageType);
 
-        player.hp -= damage;
-        addGameLog(`👹 ${monster.name}의 ${damageType === 'magical' ? '마법 ' : ''}공격! ${damage} 데미지!`);
+                // 방어 중이면 데미지 감소
+                if (battleState.isDefending) {
+                    const defenseMultiplier = 2.5 + Math.random();
+                    const baseDef = damageType === 'magical' ?
+                        (player.mDef || 0) + (player.bonusMDef || 0) :
+                        (player.pDef || 0) + (player.bonusPDef || 0);
+                    const additionalDef = Math.floor(baseDef * defenseMultiplier);
+                    damage = Math.max(1, damage - additionalDef);
+                    
+                    if (attackIndex === 0) {
+                        addGameLog(`🛡️ 방어로 피해 감소!`);
+                    }
+                }
+
+                player.hp -= damage;
+                addGameLog(`👹 ${monster.name}의 ${damageType === 'magical' ? '마법 ' : ''}공격! ${damage} 데미지!`);
+            }
+        }
+        
+        // 공격 후 상태이상 피해 및 지속시간 처리 (출혈, 화상 등)
+        processMonsterStatusEffectsAfterAttack(monster);
+        
+        // 플레이어 HP 확인
+        if (player.hp <= 0) {
+            player.hp = 0;
+            updateBattleUI();
+            setTimeout(() => endBattle('defeat'), 500);
+            return;
+        }
+        
+        attackIndex++;
+        
+        // 다음 몬스터 공격 (0.5초 딜레이)
+        if (attackIndex < aliveMonsters.length) {
+            setTimeout(nextMonsterAttack, 500);
+        } else {
+            finishMonsterTurn();
+        }
     }
+    
+    // 첫 번째 몬스터 공격 시작
+    nextMonsterAttack();
+}
 
+/**
+ * 몬스터 턴을 마무리합니다.
+ */
+function finishMonsterTurn() {
     // 방어 해제
     battleState.isDefending = false;
-
-    // 플레이어 HP 확인
-    if (player.hp <= 0) {
-        player.hp = 0;
-        updateBattleUI();
-        setTimeout(() => endBattle('defeat'), 500);
-        return;
-    }
 
     updateBattleUI();
 
@@ -1096,33 +1346,73 @@ function hideBattleUI() {
 }
 
 /**
- * 전투 UI를 업데이트합니다.
+ * 전투 UI를 업데이트합니다. (다중 몬스터 지원)
  */
 function updateBattleUI() {
-    const monster = battleState.currentMonster;
-    if (!monster) return;
-
-    // 몬스터 이름
-    const monsterName = document.getElementById('monsterName');
-    if (monsterName) monsterName.textContent = monster.name;
-
-    // 몬스터 스프라이트
-    const monsterSprite = document.getElementById('monsterSprite');
-    if (monsterSprite) monsterSprite.textContent = monster.emoji || '👹';
-
-    // 몬스터 HP 바
-    const monsterHpBar = document.getElementById('monsterHpBar');
-    if (monsterHpBar) {
+    const monsters = battleState.monsters || [];
+    const container = document.getElementById('monstersContainer');
+    
+    if (!container) return;
+    
+    // 몬스터 컨테이너 초기화
+    container.innerHTML = '';
+    
+    // 각 몬스터에 대해 카드 생성
+    monsters.forEach((monster, index) => {
+        const isSelected = index === battleState.currentMonsterIndex;
+        const isDead = monster.hp <= 0;
+        
+        const monsterCard = document.createElement('div');
+        monsterCard.className = `monster-card ${isSelected ? 'selected' : ''} ${isDead ? 'dead' : ''}`;
+        monsterCard.dataset.index = index;
+        
+        // 클릭하여 타겟 선택 (죽은 몬스터 제외)
+        if (!isDead) {
+            monsterCard.onclick = () => selectMonsterTarget(index);
+            monsterCard.style.cursor = 'pointer';
+        }
+        
         const hpPercent = Math.max(0, (monster.hp / monster.maxHp) * 100);
-        monsterHpBar.style.width = `${hpPercent}%`;
-    }
-
-    // 몬스터 HP 텍스트
-    const monsterHpText = document.getElementById('monsterHpText');
-    if (monsterHpText) monsterHpText.textContent = `${Math.max(0, monster.hp)}/${monster.maxHp}`;
-
+        
+        monsterCard.innerHTML = `
+            <div class="monster-sprite">${monster.emoji || '👹'}</div>
+            <div class="monster-info">
+                <span class="monster-name">${monster.name}${isDead ? ' ☠️' : ''}</span>
+                <div class="bar monster-hp-bar">
+                    <div class="bar-fill" style="width: ${hpPercent}%; background: ${isDead ? '#555' : 'linear-gradient(90deg, #e74c3c, #c0392b)'};"></div>
+                    <span class="bar-text">${Math.max(0, monster.hp)}/${monster.maxHp}</span>
+                </div>
+            </div>
+            ${isSelected && !isDead ? '<div class="target-indicator">🎯</div>' : ''}
+        `;
+        
+        container.appendChild(monsterCard);
+    });
+    
     // 플레이어 정보
     updatePlayerUI();
+}
+
+/**
+ * 타겟 몬스터를 선택합니다.
+ */
+function selectMonsterTarget(index) {
+    if (!battleState.inBattle) return;
+    
+    const monsters = battleState.monsters || [];
+    const monster = monsters[index];
+    
+    // 죽은 몬스터는 선택 불가
+    if (!monster || monster.hp <= 0) {
+        addGameLog('⚠️ 이 대상은 선택할 수 없습니다!');
+        return;
+    }
+    
+    battleState.currentMonsterIndex = index;
+    battleState.currentMonster = monster;
+    
+    addGameLog(`🎯 ${monster.name}을(를) 대상으로 선택!`);
+    updateBattleUI();
 }
 
 // ============================================

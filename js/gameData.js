@@ -1111,7 +1111,43 @@ const MAPS = {
                 canExplore: true,
                 canBattle: true,
                 monsters: ['demon_guardian', 'demon_archduke'],
-                connections: ['guardian_hall', 'throne_room']
+                connections: ['guardian_hall', 'throne_room', 'archduke_chamber_2']
+            },
+
+            // 7-1. 내성 - 악마대공의 방 2
+            archduke_chamber_2: {
+                id: 'archduke_chamber_2',
+                name: '악마대공의 방 2',
+                description: '또 다른 악마대공이 거주하는 방. 마왕의 또 다른 측근이다.',
+                actions: ['move', 'battle', 'explore'],
+                canExplore: true,
+                canBattle: true,
+                monsters: ['demon_guardian', 'demon_archduke', 'fallen_angel'],
+                connections: ['archduke_chamber', 'demon_banquet_hall', 'demon_barracks']
+            },
+
+            // 7-2. 악마의 연회장
+            demon_banquet_hall: {
+                id: 'demon_banquet_hall',
+                name: '악마의 연회장',
+                description: '악마들이 만찬을 즐기는 화려한 연회장. 다양한 악마들이 먹고 마시고 있다.',
+                actions: ['move', 'battle', 'explore'],
+                canExplore: true,
+                canBattle: true,
+                monsters: ['imp', 'succubus', 'demon_soldier', 'demon_guardian'],
+                connections: ['archduke_chamber_2', 'demon_barracks']
+            },
+
+            // 7-3. 악마병영
+            demon_barracks: {
+                id: 'demon_barracks',
+                name: '악마병영',
+                description: '악마 군단이 훈련하고 대기하는 병영. 수많은 악마 병사들이 전투 준비를 하고 있다.',
+                actions: ['move', 'battle', 'explore'],
+                canExplore: true,
+                canBattle: true,
+                monsters: ['demon_soldier', 'demon_guardian', 'hell_hound'],
+                connections: ['archduke_chamber_2', 'demon_banquet_hall', 'inner_castle']
             },
 
             // 8. 내성 입구
@@ -1223,6 +1259,26 @@ const TIME_CONFIG = {
         dropRateMultiplier: 1.3,
         forcedBattleChance: 0.3  // 강제 전투 확률 30%
     }
+};
+
+// ============================================
+// 👾 다중 몬스터 조우 확률 설정
+// ============================================
+
+const ENCOUNTER_CONFIG = {
+    // 동시 조우 몬스터 수 확률 (합계 100%)
+    monsterCountChances: [
+        { count: 1, chance: 0.60 },   // 1마리: 60%
+        { count: 2, chance: 0.15 },   // 2마리: 15%
+        { count: 3, chance: 0.10 },   // 3마리: 10%
+        { count: 4, chance: 0.05 },   // 4마리: 5%
+        { count: 5, chance: 0.03 },   // 5마리: 3%
+        { count: 6, chance: 0.02 },   // 6마리: 2%
+        { count: 7, chance: 0.02 },   // 7마리: 2%
+        { count: 8, chance: 0.015 },  // 8마리: 1.5%
+        { count: 9, chance: 0.01 },   // 9마리: 1%
+        { count: 10, chance: 0.005 } // 10마리: 0.5%
+    ]
 };
 
 // ============================================
@@ -2918,13 +2974,13 @@ const NPCS = {
 const LOCATION_BACKGROUNDS = {
     // 훈련장 배경
     training: {
-        entrance: 'assets/backgrounds/training/entrance.jpg',
-        beginner_field: 'assets/backgrounds/training/beginner_field.jpg',
-        intermediate_field: 'assets/backgrounds/training/intermediate_field.jpg',
-        advanced_field: 'assets/backgrounds/training/advanced_field.jpg',
-        rest_area: 'assets/backgrounds/training/rest_area.jpg',
+        entrance: 'assets/backgrounds/training/entrance.png',
+        beginner_field: 'assets/backgrounds/training/beginner_field.png',
+        intermediate_field: 'assets/backgrounds/training/intermediate_field.png',
+        advanced_field: 'assets/backgrounds/training/advanced_field.png',
+        rest_area: 'assets/backgrounds/training/rest_area.png',
         shop: 'assets/backgrounds/training/shop.jpg',
-        senior_instructor_house: 'assets/backgrounds/training/senior_instructor_house.jpg'
+        senior_instructor_house: 'assets/backgrounds/training/senior_instructor_house.png'
     },
 
     // 버려진 마을 배경
@@ -2994,15 +3050,18 @@ const LOCATION_BACKGROUNDS = {
 
     // 악마의 성 배경
     demon_castle: {
-        entrance: 'assets/backgrounds/demon_castle/entrance.jpg',
-        flame_river: 'assets/backgrounds/demon_castle/flame_river.jpg',
-        dungeon: 'assets/backgrounds/demon_castle/dungeon.jpg',
-        demon_city: 'assets/backgrounds/demon_castle/demon_city.jpg',
-        pain_lab: 'assets/backgrounds/demon_castle/pain_lab.jpg',
-        guardian_hall: 'assets/backgrounds/demon_castle/guardian_hall.jpg',
-        archduke_chamber: 'assets/backgrounds/demon_castle/archduke_chamber.jpg',
-        inner_castle: 'assets/backgrounds/demon_castle/inner_castle.jpg',
-        throne_room: 'assets/backgrounds/demon_castle/throne_room.jpg'
+        entrance: 'assets/backgrounds/demon_castle/entrance.png',
+        flame_river: 'assets/backgrounds/demon_castle/flame_river.png',
+        dungeon: 'assets/backgrounds/demon_castle/dungeon.png',
+        demon_city: 'assets/backgrounds/demon_castle/demon_city.png',
+        pain_lab: 'assets/backgrounds/demon_castle/pain_lab.png',
+        guardian_hall: 'assets/backgrounds/demon_castle/guardian_hall.png',
+        archduke_chamber: 'assets/backgrounds/demon_castle/archduke_chamber.png',
+        archduke_chamber_2: 'assets/backgrounds/demon_castle/demon_archduke_room_2.png',
+        demon_banquet_hall: 'assets/backgrounds/demon_castle/demon_banquet_hall.png',
+        demon_barracks: 'assets/backgrounds/demon_castle/demon_barracks.png',
+        inner_castle: 'assets/backgrounds/demon_castle/inner_castle.png',
+        throne_room: 'assets/backgrounds/demon_castle/throne_room.png'
     }
 };
 

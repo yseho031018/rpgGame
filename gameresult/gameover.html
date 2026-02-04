@@ -420,19 +420,19 @@
             <div class="stats-title">📊 최종 기록</div>
             <div class="stats-grid">
                 <div class="stat-item">
-                    <span class="stat-label">생존 시간</span>
+                    <span class="stat-label" data-label="survival">생존 시간</span>
                     <span class="stat-value" id="survivalTime">05:32</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">처치한 적</span>
+                    <span class="stat-label" data-label="enemies">처치한 적</span>
                     <span class="stat-value" id="enemiesKilled">24</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">획득 점수</span>
+                    <span class="stat-label" data-label="score">획득 점수</span>
                     <span class="stat-value" id="score">12,450</span>
                 </div>
                 <div class="stat-item">
-                    <span class="stat-label">도달 스테이지</span>
+                    <span class="stat-label" data-label="stage">도달 스테이지</span>
                     <span class="stat-value" id="stage">Stage 3</span>
                 </div>
             </div>
@@ -476,24 +476,55 @@
             }
         }
 
+        // 게임 데이터 로드 및 UI 업데이트
+        function loadGameData() {
+            const dataStr = sessionStorage.getItem('gameOverData');
+            if (dataStr) {
+                try {
+                    const data = JSON.parse(dataStr);
+                    
+                    // 통계 업데이트
+                    document.getElementById('survivalTime').textContent = data.playTime || '00:00:00';
+                    document.getElementById('enemiesKilled').textContent = `Lv.${data.level || 1} ${data.job || '모험가'}`;
+                    document.getElementById('score').textContent = `${(data.gold || 0).toLocaleString()} G`;
+                    document.getElementById('stage').textContent = data.lastLocation || '알 수 없는 장소';
+                    
+                    // 부제목 업데이트
+                    const subtitle = document.querySelector('.subtitle');
+                    if (subtitle && data.lastMonster) {
+                        subtitle.textContent = `${data.lastMonster}에게 패배했습니다`;
+                    }
+                    
+                    // 라벨 업데이트
+                    document.querySelector('[data-label="survival"]').textContent = '플레이 시간';
+                    document.querySelector('[data-label="enemies"]').textContent = '캐릭터';
+                    document.querySelector('[data-label="score"]').textContent = '소지금';
+                    document.querySelector('[data-label="stage"]').textContent = '최후의 장소';
+                    
+                } catch (e) {
+                    console.error('게임 데이터 파싱 오류:', e);
+                }
+            }
+        }
+
         // 다시 도전 버튼
         function retryGame() {
-            // 실제 게임으로 돌아가기
-            // window.location.href = '../rpg.html';
-            alert('게임을 다시 시작합니다!');
+            // 세이브 데이터 삭제 후 새 게임 시작
+            sessionStorage.removeItem('gameOverData');
+            window.location.href = '../rpgmain.html';
         }
 
         // 메인 메뉴로 이동
         function goToMenu() {
-            // 메인 메뉴로 이동
-            // window.location.href = '../index.html';
-            alert('메인 메뉴로 이동합니다!');
+            sessionStorage.removeItem('gameOverData');
+            window.location.href = '../rpgmain.html';
         }
 
         // 초기화
         window.onload = function () {
             createParticles();
             createBloodDrips();
+            loadGameData();
         };
     </script>
 </body>
