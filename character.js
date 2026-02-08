@@ -69,6 +69,16 @@ class Character {
         this.atk += LEVEL_UP_STATS.atk;
         this.def += LEVEL_UP_STATS.def;
 
+        // 포만감/수분 100% 회복
+        if (typeof hungerState !== 'undefined') {
+            hungerState.hunger = 100;
+            hungerState.thirst = 100;
+            hungerState.lastUpdate = Date.now();
+            if (typeof updateHungerUI === 'function') {
+                updateHungerUI();
+            }
+        }
+
         // 다음 레벨 경험치
         this.requiredExp = getRequiredExp(this.level);
         this.exp = 0;

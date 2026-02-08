@@ -519,6 +519,7 @@ function renderCharacterInfo() {
             <span class="stat-label">${jobIcon} 직업</span>
             <span class="stat-value">${jobName}</span>
         </div>
+        <button class="skill-trait-view-btn" onclick="showSkillTraitModal()">⚡ 스킬 및 특성 보기</button>
         <div class="stat-divider"></div>
         <div class="stat-row">
             <span class="stat-label">❤️ HP</span>
@@ -563,7 +564,7 @@ function renderCharacterInfo() {
         </div>
         <div class="stat-divider"></div>
         <div class="stat-row sub-stat">
-            <span class="stat-label">🎯 효율</span>
+            <span class="stat-label">🎯 정확도</span>
             <span class="stat-value">${player.efficiency || 0}%</span>
         </div>
         <div class="stat-row sub-stat">
@@ -851,7 +852,7 @@ function showStatAllocationUI() {
         { id: 'str', name: '근력', icon: '💪', desc: '물리공격력/방어력 증가', value: player.str || 0 },
         { id: 'vit', name: '체력', icon: '🫀', desc: 'HP/방어력/회복효율 증가', value: player.vit || 0 },
         { id: 'int', name: '지능', icon: '🧠', desc: 'MP/마법공격력/방어력 증가', value: player.int || 0 },
-        { id: 'agi', name: '민첩', icon: '💨', desc: '효율/회피율 증가', value: player.agi || 0 }
+        { id: 'agi', name: '민첩', icon: '💨', desc: '정확도/회피율 증가', value: player.agi || 0 }
     ];
 
     let html = `
@@ -922,3 +923,106 @@ function addTestItems() {
 // ============================================
 
 console.log('📦 inventorySystem.js 로드 완료!');
+
+// ============================================
+// ⚡ 스킬 및 특성 보기 모달
+// ============================================
+
+/**
+ * 스킬 및 특성 보기 모달을 표시합니다.
+ */
+function showSkillTraitModal() {
+    // 기존 모달 제거
+    closeSkillTraitModal();
+    
+    const modal = document.createElement('div');
+    modal.id = 'skillTraitModal';
+    modal.className = 'skill-trait-modal';
+    
+    // 플레이어 스킬 목록
+    const skills = player.skills || [];
+    const trait = player.trait;
+    const traitData = trait && typeof TRAITS !== 'undefined' ? TRAITS[trait] : null;
+    
+    let skillsHtml = '';
+    if (skills.length === 0) {
+        skillsHtml = '<div class="no-skills">습득한 스킬이 없습니다.</div>';
+    } else {
+        skills.forEach(skillId => {
+            const skill = typeof SKILLS !== 'undefined' ? SKILLS[skillId] : null;
+            if (skill) {
+                const cooldown = player.skillCooldowns?.[skillId] || 0;
+                skillsHtml += `
+                    <div class="skill-trait-item">
+                        <div class="skill-trait-icon">${skill.icon}</div>
+                        <div class="skill-trait-info">
+                            <div class="skill-trait-name">${skill.name}</div>
+                            <div class="skill-trait-desc">${skill.description}</div>
+                            <div class="skill-trait-stats">
+                                <span>MP: ${skill.mpCost}</span>
+                                <span>쿨타임: ${skill.cooldown}턴</span>
+                                ${skill.unlockLevel ? `<span>해금 레벨: ${skill.unlockLevel}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        });
+    }
+    
+    let traitHtml = '';
+    if (traitData) {
+        const traitState = player.traitState || {};
+        let statusText = '';
+        if (traitState.active) {
+            statusText = `<span class="trait-active">활성화 (${traitState.duration}턴)</span>`;
+        } else if (traitState.cooldown > 0) {
+            statusText = `<span class="trait-cooldown">쿨다운 (${traitState.cooldown}턴)</span>`;
+        } else {
+            statusText = '<span class="trait-ready">발동 대기</span>';
+        }
+        
+        traitHtml = `
+            <div class="skill-trait-item trait-item">
+                <div class="skill-trait-icon">${traitData.icon}</div>
+                <div class="skill-trait-info">
+                    <div class="skill-trait-name">${traitData.name} ${statusText}</div>
+                    <div class="skill-trait-desc">${traitData.description}</div>
+                </div>
+            </div>
+        `;
+    } else {
+        traitHtml = '<div class="no-skills">특성이 없습니다.</div>';
+    }
+    
+    modal.innerHTML = `
+        <div class="skill-trait-content">
+            <div class="skill-trait-header">
+                <h2>⚡ 스킬 및 특성</h2>
+                <button class="skill-trait-close-btn" onclick="closeSkillTraitModal()">×</button>
+            </div>
+            <div class="skill-trait-section">
+                <h3>🌟 특성</h3>
+                <div class="skill-trait-list">
+                    ${traitHtml}
+                </div>
+            </div>
+            <div class="skill-trait-section">
+                <h3>⚔️ 스킬 목록</h3>
+                <div class="skill-trait-list">
+                    ${skillsHtml}
+                </div>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+/**
+ * 스킬 및 특성 모달을 닫습니다.
+ */
+function closeSkillTraitModal() {
+    const modal = document.getElementById('skillTraitModal');
+    if (modal) modal.remove();
+}

@@ -151,6 +151,16 @@ function showDifficultySelection() {
 }
 
 /**
+ * 난이도 선택 UI 닫기 (메인 메뉴로 돌아감)
+ */
+function hideDifficultySelection() {
+    const overlay = document.getElementById('difficultyOverlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+    }
+}
+
+/**
  * 난이도 선택 처리
  */
 function selectDifficulty(diff) {
@@ -275,10 +285,39 @@ function renderJobInfo(jobId) {
 
     const job = JOBS[jobId];
     const base = job.baseStats;
+    const r = typeof STATS_CONFIG !== 'undefined' ? STATS_CONFIG.ratios : {
+        hpPerVit: 2, hpPerStr: 1/3, mpPerInt: 1, pAtkPerStr: 0.5, mAtkPerInt: 0.5,
+        pDefPerStr: 1/6, pDefPerVit: 0.5, mDefPerInt: 1/6, mDefPerVit: 0.5
+    };
 
-    // 스킬 정보
+    // 4대 스탯 범위 (기본 ± 2)
+    const strMin = base.str - 2, strMax = base.str + 2;
+    const vitMin = base.vit - 2, vitMax = base.vit + 2;
+    const intMin = base.int - 2, intMax = base.int + 2;
+    const agiMin = base.agi - 2, agiMax = base.agi + 2;
+
+    // 최종 HP/MP 범위 (기본값 + 스탯 보너스 범위)
+    // HP = baseHp + vit × 2 + str × (1/3), MP = baseMp + int × 1
+    const hpMin = base.hp + Math.round(vitMin * r.hpPerVit) + Math.round(strMin * (r.hpPerStr || 0));
+    const hpMax = base.hp + Math.round(vitMax * r.hpPerVit) + Math.round(strMax * (r.hpPerStr || 0));
+    const mpMin = base.mp + Math.round(intMin * r.mpPerInt);
+    const mpMax = base.mp + Math.round(intMax * r.mpPerInt);
+
+    // 최종 공격력 범위 (기본값 + 스탯 보너스 범위)
+    const pAtkMin = Math.round(base.pAtk + strMin * r.pAtkPerStr);
+    const pAtkMax = Math.round(base.pAtk + strMax * r.pAtkPerStr);
+    const mAtkMin = Math.round(base.mAtk + intMin * r.mAtkPerInt);
+    const mAtkMax = Math.round(base.mAtk + intMax * r.mAtkPerInt);
+
+    // 최종 방어력 범위 (기본값 + 스탯 보너스 범위)
+    const pDefMin = Math.round(base.pDef + strMin * r.pDefPerStr + vitMin * r.pDefPerVit);
+    const pDefMax = Math.round(base.pDef + strMax * r.pDefPerStr + vitMax * r.pDefPerVit);
+    const mDefMin = Math.round(base.mDef + intMin * r.mDefPerInt + vitMin * r.mDefPerVit);
+    const mDefMax = Math.round(base.mDef + intMax * r.mDefPerInt + vitMax * r.mDefPerVit);
+
+    // 스킬 정보 (축약)
     const skill = SKILLS[job.startingSkill];
-    const skillInfo = skill ? `<p class="job-skill-info">💥 초기 스킬: <strong>${skill.name}</strong> - ${skill.description}</p>` : '';
+    const skillInfo = skill ? `<p class="job-skill-info">💥 <strong>${skill.name}</strong>: ${skill.description}</p>` : '';
 
     infoEl.innerHTML = `
         <div class="job-info-header">
@@ -287,16 +326,19 @@ function renderJobInfo(jobId) {
         </div>
         <p class="job-info-desc">${job.description}</p>
         <div class="job-info-stats">
-            <div class="stat-range">❤️ HP: ${base.hp - 5} ~ ${base.hp + 5}</div>
-            <div class="stat-range">💙 MP: ${base.mp - 3} ~ ${base.mp + 3}</div>
-            <div class="stat-range">⚔️ 물공: ${base.pAtk - 2} ~ ${base.pAtk + 2}</div>
-            <div class="stat-range">🔮 마공: ${base.mAtk - 2} ~ ${base.mAtk + 2}</div>
-            <div class="stat-range sub">💪 근력: ${base.str - 2} ~ ${base.str + 2}</div>
-            <div class="stat-range sub">🫀 체력: ${base.vit - 2} ~ ${base.vit + 2}</div>
-            <div class="stat-range sub">🧠 지능: ${base.int - 2} ~ ${base.int + 2}</div>
-            <div class="stat-range sub">💨 민첩: ${base.agi - 2} ~ ${base.agi + 2}</div>
+            <div class="stat-range">❤️ HP: ${hpMin} ~ ${hpMax}</div>
+            <div class="stat-range">💙 MP: ${mpMin} ~ ${mpMax}</div>
+            <div class="stat-range">⚔️ 물공: ${pAtkMin} ~ ${pAtkMax}</div>
+            <div class="stat-range">🔮 마공: ${mAtkMin} ~ ${mAtkMax}</div>
+            <div class="stat-range">🛡️ 물방: ${pDefMin} ~ ${pDefMax}</div>
+            <div class="stat-range">🔰 마방: ${mDefMin} ~ ${mDefMax}</div>
+            <div class="stat-range sub">💪 근력: ${strMin} ~ ${strMax}</div>
+            <div class="stat-range sub">🫀 체력: ${vitMin} ~ ${vitMax}</div>
+            <div class="stat-range sub">🧠 지능: ${intMin} ~ ${intMax}</div>
+            <div class="stat-range sub">💨 민첩: ${agiMin} ~ ${agiMax}</div>
         </div>
-        <p class="job-info-main">주 스탯: <strong>${getStatName(job.mainStat)}</strong> | 피해 타입: <strong>${job.damageType === 'physical' ? '물리' : '마법'}</strong></p>
+        <p class="job-info-note">※ 4대 스탯 랜덤 → 6대 지표에 반영</p>
+        <p class="job-info-main">주 스탯: <strong>${getStatName(job.mainStat)}</strong> | 피해: <strong>${job.damageType === 'physical' ? '물리' : '마법'}</strong></p>
         ${skillInfo}
         <button class="confirm-job-btn" onclick="confirmJobSelection('${jobId}')">
             ✅ ${job.name} 선택하기
@@ -382,31 +424,31 @@ function generateStatsForJob(jobId) {
     const base = job.baseStats;
     const r = STATS_CONFIG.ratios;
 
-    // 기본 스탯 + 랸덤 (-2 ~ +2)
+    // 기본 스탯 + 랜덤 (-2 ~ +2) - 근력/체력/지능/민첩만 랜덤
     const str = base.str + Math.floor(Math.random() * 5) - 2;
     const vit = base.vit + Math.floor(Math.random() * 5) - 2;
     const int = base.int + Math.floor(Math.random() * 5) - 2;
     const agi = base.agi + Math.floor(Math.random() * 5) - 2;
 
-    // 기본 HP/MP + 랸덤
-    const baseHp = base.hp + Math.floor(Math.random() * 11) - 5;
-    const baseMp = base.mp + Math.floor(Math.random() * 7) - 3;
+    // 기본 HP/MP - 고정값 (랜덤 제거)
+    const baseHp = base.hp;
+    const baseMp = base.mp;
 
-    // 기본 공격력/방어력 + 랸덤
-    const basePAtk = base.pAtk + Math.floor(Math.random() * 5) - 2;
-    const baseMAtk = base.mAtk + Math.floor(Math.random() * 5) - 2;
-    const basePDef = base.pDef + Math.floor(Math.random() * 5) - 2;
-    const baseMDef = base.mDef + Math.floor(Math.random() * 5) - 2;
+    // 기본 공격력/방어력 - 고정값 (랜덤 제거)
+    const basePAtk = base.pAtk;
+    const baseMAtk = base.mAtk;
+    const basePDef = base.pDef;
+    const baseMDef = base.mDef;
 
-    // 파생 스탯 계산 (반올림 적용)
-    const hp = baseHp + Math.round(vit * r.hpPerVit);
+    // 파생 스탯 계산 (반올림 적용) - 스탯 랜덤에 따라 자연스러운 변동 발생
+    const hp = baseHp + Math.round(vit * r.hpPerVit) + Math.round(str * (r.hpPerStr || 0));
     const mp = baseMp + Math.round(int * r.mpPerInt);
     const pAtk = Math.round(basePAtk + str * r.pAtkPerStr);
     const mAtk = Math.round(baseMAtk + int * r.mAtkPerInt);
     const pDef = Math.round(basePDef + str * r.pDefPerStr + vit * r.pDefPerVit);
     const mDef = Math.round(baseMDef + int * r.mDefPerInt + vit * r.mDefPerVit);
 
-    // 효율/회피/회복효율 (반올림)
+    // 정확도/회피/회복효율 (반올림)
     const efficiency = Math.round(agi * r.efficiencyPerAgi);
     const evasion = Math.round(agi * r.evasionPerAgi);
     const healEff = Math.round(vit * r.healEffPerVit);
@@ -418,13 +460,13 @@ function generateStatsForJob(jobId) {
         int: Math.max(1, int),
         agi: Math.max(1, agi),
         // 기본 HP/MP
-        baseHp: Math.max(20, baseHp),
-        baseMp: Math.max(10, baseMp),
+        baseHp: Math.max(35, baseHp),
+        baseMp: Math.max(20, baseMp),
         // 파생 스탯
-        hp: Math.max(30, hp),
-        maxHp: Math.max(30, hp),
-        mp: Math.max(15, mp),
-        maxMp: Math.max(15, mp),
+        hp: Math.max(40, hp),
+        maxHp: Math.max(40, hp),
+        mp: Math.max(30, mp),
+        maxMp: Math.max(30, mp),
         pAtk: Math.max(1, pAtk),
         mAtk: Math.max(1, mAtk),
         pDef: Math.max(0, pDef),
@@ -539,7 +581,7 @@ function renderStatsPreview() {
         </div>
         <div class="stat-divider full-width"></div>
         <div class="stat-preview sub">
-            <span class="stat-name">🎯 효율</span>
+            <span class="stat-name">🎯 정확도</span>
             <span class="stat-value">${tempStats.efficiency}%</span>
         </div>
         <div class="stat-preview sub">
@@ -617,7 +659,15 @@ function confirmCharacter() {
 
         // 스킬
         skills: [job.startingSkill],
-        skillCooldowns: {}
+        skillCooldowns: {},
+
+        // 특성
+        trait: job.startingTrait || null,
+        traitState: {
+            active: false,       // 특성 효과 활성화 여부
+            duration: 0,         // 남은 지속시간
+            cooldown: 0          // 쿨다운 턴
+        }
     };
 
     // 게임 데이터 초기화

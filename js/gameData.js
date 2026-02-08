@@ -1191,30 +1191,95 @@ const DIFFICULTY = {
     easy: {
         id: 'easy',
         name: 'Easy',
-        multiplier: 0.8,
+        hpMultiplier: 0.8,
+        atkMultiplier: 0.9,
+        gradeChance: { common: 0.80, rare: 0.15, epic: 0.04, legendary: 0.01 },
         color: '#4CAF50',
         description: '몬스터가 약해집니다.'
     },
     normal: {
         id: 'normal',
         name: 'Normal',
-        multiplier: 1.0,
+        hpMultiplier: 1.0,
+        atkMultiplier: 1.0,
+        gradeChance: { common: 0.75, rare: 0.18, epic: 0.05, legendary: 0.02 },
         color: '#2196F3',
         description: '표준 난이도입니다.'
     },
     hard: {
         id: 'hard',
         name: 'Hard',
-        multiplier: 1.5,
+        hpMultiplier: 1.5,
+        atkMultiplier: 1.2,
+        gradeChance: { common: 0.70, rare: 0.20, epic: 0.07, legendary: 0.03 },
         color: '#FF9800',
         description: '몬스터가 강해집니다.'
     },
     hell: {
         id: 'hell',
         name: 'Hell',
-        multiplier: 2.3,
+        hpMultiplier: 2.3,
+        atkMultiplier: 1.5,
+        gradeChance: { common: 0.60, rare: 0.25, epic: 0.09, legendary: 0.06 },
         color: '#F44336',
         description: '극한의 도전입니다.'
+    }
+};
+
+// ============================================
+// 🏆 몬스터 등급 데이터
+// ============================================
+
+const MONSTER_GRADE = {
+    common: {
+        id: 'common',
+        name: '일반',
+        color: '#FFFFFF',
+        hpMultiplier: 1.0,
+        atkMultiplier: 1.0,
+        expMultiplier: 1.0,
+        goldMultiplier: 1.0,
+        icon: ''
+    },
+    rare: {
+        id: 'rare',
+        name: '희귀',
+        color: '#5DADE2',
+        hpMultiplier: 1.3,
+        atkMultiplier: 1.15,
+        expMultiplier: 1.5,
+        goldMultiplier: 1.5,
+        icon: '💠'
+    },
+    epic: {
+        id: 'epic',
+        name: '에픽',
+        color: '#A569BD',
+        hpMultiplier: 1.6,
+        atkMultiplier: 1.3,
+        expMultiplier: 2.0,
+        goldMultiplier: 2.0,
+        icon: '🔮'
+    },
+    legendary: {
+        id: 'legendary',
+        name: '전설',
+        color: '#F4D03F',
+        hpMultiplier: 2.0,
+        atkMultiplier: 1.5,
+        expMultiplier: 3.0,
+        goldMultiplier: 3.0,
+        icon: '👑'
+    },
+    boss: {
+        id: 'boss',
+        name: '보스',
+        color: '#E74C3C',
+        hpMultiplier: 1.0,  // 추후 사용자가 설정
+        atkMultiplier: 1.0, // 추후 사용자가 설정
+        expMultiplier: 5.0,
+        goldMultiplier: 5.0,
+        icon: '💀'
     }
 };
 
@@ -1403,7 +1468,7 @@ const LEVEL_UP_STATS = {
  * - 마법공격력 = 기본마공 + round(지능 / 2) + 장비
  * - 물리방어력 = 기본물방 + round(근력 / 6) + round(체력 / 2) + 장비
  * - 마법방어력 = 기본마방 + round(지능 / 6) + round(체력 / 2) + 장비
- * - 효율 = round(민첩 / 8) % (배수 확률 조정)
+ * - 정확도 = round(민첩 / 8) % (배수 확률 조정)
  * - 회피율 = round(민첩 / 7) %
  * - 회복효율 = round(체력 / 3) % (모든 회복량 증가)
  */
@@ -1423,12 +1488,14 @@ const JOBS = {
         },
         startingEquipment: ['old_longsword', 'old_heavy_leather_armor'],
         startingSkill: 'smash',
+        startingTrait: 'unyielding',
+        level5Skill: 'spirit_sword',
         icon: '⚔️'
     },
     archer: {
         id: 'archer',
         name: '궁수',
-        description: '민첩이 높아 회피와 효율이 뛰어납니다. 강력한 한 방으로 적을 처치합니다.',
+        description: '민첩이 높아 회피와 정확도가 뛰어납니다. 강력한 한 방으로 적을 처치합니다.',
         mainStat: 'agi',
         damageType: 'physical',
         baseStats: {
@@ -1439,6 +1506,8 @@ const JOBS = {
         },
         startingEquipment: ['crude_bow', 'old_hunting_clothes'],
         startingSkill: 'multishot',
+        startingTrait: 'hawks_eye',
+        level5Skill: 'charge_shot',
         icon: '🏹'
     },
     mage: {
@@ -1455,6 +1524,8 @@ const JOBS = {
         },
         startingEquipment: ['crude_staff', 'old_robe'],
         startingSkill: 'fireball',
+        startingTrait: 'meditation',
+        level5Skill: 'lightning_bolt',
         icon: '🧙'
     },
     skirmisher: {
@@ -1472,6 +1543,8 @@ const JOBS = {
         },
         startingEquipment: ['old_sword', 'old_leather_armor'],
         startingSkill: 'slash_combo',
+        startingTrait: 'swift',
+        level5Skill: 'ambush',
         icon: '🗡️'
     }
 };
@@ -1486,6 +1559,7 @@ const STATS_CONFIG = {
     // 스탯 계산 비율
     ratios: {
         hpPerVit: 2,           // 체력 1당 HP +2
+        hpPerStr: 1 / 3,       // 근력 3당 HP +1
         mpPerInt: 1,           // 지능 1당 MP +1
         pAtkPerStr: 0.5,       // 근력 2당 물리공격력 +1
         mAtkPerInt: 0.5,       // 지능 2당 마법공격력 +1
@@ -1493,7 +1567,7 @@ const STATS_CONFIG = {
         pDefPerVit: 0.5,       // 체력 2당 물리방어력 +1
         mDefPerInt: 1 / 6,       // 지능 6당 마법방어력 +1
         mDefPerVit: 0.5,       // 체력 2당 마법방어력 +1
-        efficiencyPerAgi: 1 / 7, // 민첩 7당 효율 +1%
+        efficiencyPerAgi: 1 / 7, // 민첩 7당 정확도 +1%
         evasionPerAgi: 1 / 6,    // 민첩 6당 회피율 +1%
         healEffPerVit: 1 / 3     // 체력 3당 회복효율 +1%
     },
@@ -1510,11 +1584,11 @@ const STATS_CONFIG = {
         mAtk: { name: '마법공격력', desc: '마법 피해량', icon: '🔮' },
         pDef: { name: '물리방어력', desc: '물리 피해 감소', icon: '🛡️' },
         mDef: { name: '마법방어력', desc: '마법 피해 감소', icon: '🔰' },
-        str: { name: '근력', desc: '물리공격/방어 증가', icon: '💪' },
+        str: { name: '근력', desc: 'HP/물리공격/방어 증가', icon: '💪' },
         vit: { name: '체력', desc: 'HP/방어/회복효율 증가', icon: '🫀' },
         int: { name: '지능', desc: 'MP/마법공격/방어 증가', icon: '🧠' },
-        agi: { name: '민첩', desc: '효율/회피율 증가', icon: '💨' },
-        efficiency: { name: '효율', desc: '피해 배수 확률 조정', icon: '🎯' },
+        agi: { name: '민첩', desc: '정확도/회피율 증가', icon: '💨' },
+        efficiency: { name: '정확도', desc: '피해 배수 확률 조정', icon: '🎯' },
         evasion: { name: '회피율', desc: '공격 회피 확률', icon: '💫' },
         healEff: { name: '회복효율', desc: '모든 회복량 증가', icon: '💚' }
     }
@@ -1594,6 +1668,91 @@ const SKILLS = {
             statusDuration: 2
         },
         icon: '⚡'
+    },
+
+    // === 전사 5레벨 스킬 ===
+    spirit_sword: {
+        id: 'spirit_sword',
+        name: '투지의 검',
+        description: '3턴간 물리공격력 5% 증가 + 물리공격력 +5. 스킬 발동 중 가한 피해의 10% HP 회복. 50% 확률로 턴이 종료되지 않음.',
+        type: 'active',
+        damageType: 'buff',
+        mpCost: 25,
+        cooldown: 2,  // 버프 종료 후 2턴
+        targetType: 'self',
+        unlockLevel: 5,
+        job: 'warrior',
+        effects: {
+            buffDuration: 3,           // 3턴 지속
+            pAtkPercent: 5,            // 물리공격력 5% 증가
+            pAtkFlat: 5,               // 물리공격력 +5
+            lifestealPercent: 10,      // 가한 피해 10% HP 회복 (최대HP 초과 불가)
+            noTurnEndChance: 50        // 50% 확률로 턴 미종료
+        },
+        icon: '🗡️'
+    },
+
+    // === 마법사 5레벨 스킬 ===
+    lightning_bolt: {
+        id: 'lightning_bolt',
+        name: '라이트닝볼트',
+        description: '적 1명에게 마법공격력의 270% 피해를 주고 감전 상태를 1턴간 부여합니다.',
+        type: 'active',
+        damageType: 'magical',
+        mpCost: 35,
+        cooldown: 3,
+        targetType: 'single',
+        unlockLevel: 5,
+        job: 'mage',
+        effects: {
+            damagePercent: 270,
+            statusEffect: 'shock',
+            statusDuration: 1
+        },
+        icon: '⚡'
+    },
+
+    // === 궁수 5레벨 스킬 ===
+    charge_shot: {
+        id: 'charge_shot',
+        name: '차지샷',
+        description: '즉시 사용: 200% 피해. 차지 사용: 350% 피해 + 기절 + 인접 2명 50% 피해. 스킬 취소 조건: 피해 40% 초과 시 또는 기절 등 행동 불가 시.',
+        type: 'active',
+        damageType: 'physical',
+        mpCost: 35,
+        cooldown: 3,
+        targetType: 'single',
+        unlockLevel: 5,
+        job: 'archer',
+        effects: {
+            instantDamagePercent: 200,   // 즉시 사용 시 200%
+            chargedDamagePercent: 350,   // 차지 후 350%
+            statusEffect: 'stun',
+            statusDuration: 1,
+            splashDamagePercent: 50,     // 인접 2명에게 50%
+            splashTargets: 2,
+            cancelThreshold: 40          // 최대HP 40% 피해 시 취소
+        },
+        icon: '🎯'
+    },
+
+    // === 도적 5레벨 스킬 ===
+    ambush: {
+        id: 'ambush',
+        name: '기습',
+        description: '적 1명에게 물리공격력의 230% 피해. 적의 물리방어력을 50% 무시합니다.',
+        type: 'active',
+        damageType: 'physical',
+        mpCost: 30,
+        cooldown: 3,
+        targetType: 'single',
+        unlockLevel: 5,
+        job: 'skirmisher',
+        effects: {
+            damagePercent: 230,
+            armorPenetration: 50         // 물리방어력 50% 무시
+        },
+        icon: '🗡️'
     }
 };
 
@@ -1631,6 +1790,86 @@ const STATUS_EFFECTS = {
             hpPercent: 4,       // 최대HP의 4%
             ignoreDefense: true // 방어력 무시
         }
+    },
+    shock: {
+        id: 'shock',
+        name: '감전',
+        description: '적 턴에 받은 피해량의 15% 마법 피해. 인접 2명에게 절반 피해.',
+        icon: '⚡',
+        effects: {
+            damagePercent: 15,      // 받은 피해의 15%
+            damageType: 'magical',
+            splashPercent: 50,      // 인접 2명에게 절반
+            splashTargets: 2
+        }
+    },
+    stun: {
+        id: 'stun',
+        name: '기절',
+        description: '해당 턴 행동이 불가능합니다.',
+        icon: '💫',
+        effects: {
+            skipTurn: true          // 턴 스킵
+        }
+    }
+};
+
+// ============================================
+// 🌟 특성 데이터 (직업별 시작 특성)
+// ============================================
+
+const TRAITS = {
+    // === 전사 특성 ===
+    unyielding: {
+        id: 'unyielding',
+        name: '불굴',
+        description: 'HP가 30% 이하일 때 자동 발동. 받는 피해 10% 감소, 가하는 피해 10% 증가. 4턴 지속, 효과 종료 후 5턴 쿨타임.',
+        job: 'warrior',
+        icon: '🔥',
+        effects: {
+            hpThreshold: 30,           // HP 30% 이하일 때 발동
+            damageReduction: 10,       // 받는 피해 10% 감소
+            damageBonus: 10,           // 가하는 피해 10% 증가
+            duration: 4,               // 4턴 지속
+            cooldown: 5                // 효과 종료 후 5턴 쿨타임
+        }
+    },
+
+    // === 마법사 특성 ===
+    meditation: {
+        id: 'meditation',
+        name: '명상',
+        description: '매 턴당 최대 MP의 2%를 회복합니다. 최대 MP를 초과할 수 없습니다.',
+        job: 'mage',
+        icon: '🧘',
+        effects: {
+            mpRegenPercent: 2          // 매 턴 MP 2% 회복
+        }
+    },
+
+    // === 궁수 특성 ===
+    hawks_eye: {
+        id: 'hawks_eye',
+        name: '매의 눈',
+        description: '공격 시 상대의 회피율을 30% 무시합니다.',
+        job: 'archer',
+        icon: '👁️',
+        effects: {
+            evasionPenetration: 30     // 상대 회피율 30% 무시
+        }
+    },
+
+    // === 도적 특성 ===
+    swift: {
+        id: 'swift',
+        name: '신속',
+        description: '전투 첫 턴에 두 번 행동할 수 있습니다. 10턴마다 재사용 가능.',
+        job: 'skirmisher',
+        icon: '💨',
+        effects: {
+            doubleActionFirstTurn: true,   // 첫 턴 2회 행동
+            cooldown: 10                   // 10턴 쿨다운
+        }
     }
 };
 
@@ -1655,14 +1894,17 @@ const LEVEL_UP_CONFIG = {
 
 const MONSTERS = {
     // ===== 훈련장 몬스터 =====
+    // 초급훈련장
     old_scarecrow: {
         id: 'old_scarecrow',
         name: '낡은 허수아비',
         type: 'normal',
         tier: 1,
-        hp: 25, atk: 4, def: 1,
-        exp: 8, gold: 3,
-        drops: [{ item: 'old_straw', chance: 0.5 }],
+        hp: 25, mp: 0,
+        pAtk: 3, mAtk: 0, pDef: 0, mDef: 0,
+        damageType: 'physical',
+        exp: 10, gold: 5,
+        drops: [{ item: 'wood_piece', chance: 0.10 }],
         emoji: '🥸',
         image: 'assets/monsters/old_scarecrow.jpg'
     },
@@ -1671,20 +1913,25 @@ const MONSTERS = {
         name: '일반 허수아비',
         type: 'normal',
         tier: 1,
-        hp: 50, atk: 8, def: 3,
-        exp: 15, gold: 8,
-        drops: [{ item: 'straw', chance: 0.4 }, { item: 'cloth', chance: 0.2 }],
+        hp: 50, mp: 0,
+        pAtk: 5, mAtk: 0, pDef: 2, mDef: 1,
+        damageType: 'physical',
+        exp: 17, gold: 10,
+        drops: [{ item: 'wood_piece', chance: 0.15 }],
         emoji: '🧿',
         image: 'assets/monsters/scarecrow.jpg'
     },
+    // 중급훈련장
     strong_scarecrow: {
         id: 'strong_scarecrow',
         name: '튼튼한 허수아비',
         type: 'normal',
         tier: 2,
-        hp: 80, atk: 12, def: 5,
-        exp: 25, gold: 12,
-        drops: [{ item: 'straw', chance: 0.5 }, { item: 'wood', chance: 0.3 }],
+        hp: 80, mp: 0,
+        pAtk: 8, mAtk: 0, pDef: 4, mDef: 2,
+        damageType: 'physical',
+        exp: 30, gold: 18,
+        drops: [{ item: 'wood_piece', chance: 0.25 }],
         emoji: '🎃',
         image: 'assets/monsters/strong_scarecrow.jpg'
     },
@@ -1693,33 +1940,125 @@ const MONSTERS = {
         name: '거대 허수아비',
         type: 'normal',
         tier: 3,
-        hp: 120, atk: 18, def: 8,
-        exp: 40, gold: 20,
-        drops: [{ item: 'straw', chance: 0.6 }, { item: 'wood', chance: 0.4 }],
+        hp: 120, mp: 0,
+        pAtk: 12, mAtk: 0, pDef: 6, mDef: 4,
+        damageType: 'physical',
+        exp: 50, gold: 30,
+        drops: [{ item: 'wood_piece', chance: 0.50 }],
         emoji: '👹',
         image: 'assets/monsters/giant_scarecrow.jpg'
     },
+    // 상급훈련장
     training_robot: {
         id: 'training_robot',
         name: '훈련용 로봇',
-        type: 'special',
+        type: 'normal',
         tier: 3,
-        hp: 100, atk: 15, def: 10,
-        exp: 35, gold: 25,
-        drops: [{ item: 'scrap_metal', chance: 0.4 }],
+        hp: 150, mp: 0,
+        pAtk: 15, mAtk: 0, pDef: 9, mDef: 6,
+        damageType: 'physical',
+        exp: 90, gold: 70,
+        drops: [{ item: 'metal_piece', chance: 0.40 }],
         emoji: '🤖',
         image: 'assets/monsters/training_robot.jpg'
     },
     training_golem: {
         id: 'training_golem',
         name: '훈련용 골렘',
-        type: 'boss',
+        type: 'normal',  // 보스 판정 제거
         tier: 4,
-        hp: 200, atk: 25, def: 15,
-        exp: 100, gold: 80,
-        drops: [{ item: 'golem_core', chance: 0.3 }, { item: 'stone', chance: 0.6 }],
+        hp: 200, mp: 20,
+        pAtk: 20, mAtk: 0, pDef: 12, mDef: 10,
+        damageType: 'physical',
+        exp: 130, gold: 100,
+        drops: [{ item: 'metal_piece', chance: 0.60 }],
         emoji: '🗿',
-        isBoss: true
+        image: 'assets/monsters/training_golem.jpg',
+        // 5% 확률로 자가수복 특성 보유
+        possibleTraits: [{ id: 'self_repair', chance: 0.05 }]
+    },
+
+    // ===== 대련 교관 몬스터 =====
+    // 초급훈련장 - 훈련교관2 (궁수)
+    spar_instructor2: {
+        id: 'spar_instructor2',
+        name: '훈련교관2',
+        type: 'spar',
+        tier: 2,
+        hp: 300, maxMp: 50,
+        pAtk: 30, mAtk: 10, pDef: 14, mDef: 10,
+        damageType: 'physical',
+        exp: 0, gold: 0,
+        drops: [],
+        emoji: '🏹',
+        isSpar: true,
+        skills: ['arrow_shot', 'double_shot'],
+        aiPattern: { attack: 60, skill: 30, defend: 10, mpRegenPercent: 3 },
+        dialogues: { start: '내 실력을 시험해보고 싶은가? 좋아, 덤벼라!' },
+        image: 'assets/monsters/spar_instructor2.jpg'
+    },
+    // 중급훈련장 - 훈련교관3 (마법사)
+    spar_instructor3: {
+        id: 'spar_instructor3',
+        name: '훈련교관3',
+        type: 'spar',
+        tier: 3,
+        hp: 200, maxMp: 80,
+        pAtk: 10, mAtk: 30, pDef: 7, mDef: 15,
+        damageType: 'magical',
+        exp: 0, gold: 0,
+        drops: [],
+        emoji: '🔮',
+        isSpar: true,
+        skills: ['fire_bolt', 'ice_bolt'],
+        aiPattern: { attack: 60, skill: 30, defend: 10, mpRegenPercent: 3 },
+        dialogues: { start: '마법의 위력을 보여주지.' },
+        image: 'assets/monsters/spar_instructor3.jpg'
+    },
+    // 상급훈련장 - 훈련교관4 (도적)
+    spar_instructor4: {
+        id: 'spar_instructor4',
+        name: '훈련교관4',
+        type: 'spar',
+        tier: 4,
+        hp: 380, maxMp: 50,
+        pAtk: 30, mAtk: 10, pDef: 16, mDef: 10,
+        damageType: 'physical',
+        exp: 0, gold: 0,
+        drops: [],
+        emoji: '🗡️',
+        isSpar: true,
+        skills: ['backstab', 'shadow_step'],
+        aiPattern: { attack: 60, skill: 30, defend: 10, mpRegenPercent: 3 },
+        dialogues: { start: '내 속도를 따라올 수 있겠나?' },
+        image: 'assets/monsters/spar_instructor4.jpg'
+    },
+    // 상급교관의 집 - 상급교관 (전사)
+    spar_senior_instructor: {
+        id: 'spar_senior_instructor',
+        name: '상급교관',
+        type: 'spar',
+        tier: 5,
+        hp: 500, maxMp: 70,
+        pAtk: 40, mAtk: 10, pDef: 20, mDef: 15,
+        damageType: 'physical',
+        exp: 0, gold: 0,
+        drops: [],
+        emoji: '⚔️',
+        isSpar: true,
+        skills: ['power_strike', 'shield_bash'],
+        aiPattern: { attack: 60, skill: 30, defend: 10, mpRegenPercent: 3 },
+        dialogues: { 
+            start: '자네 강하구만, 이제부터 진심으로 상대해주지.',
+            phase2: '자네 강하구만, 이제부터 진심으로 상대해주지.'
+        },
+        image: 'assets/monsters/spar_senior_instructor.jpg',
+        phase2Image: 'assets/monsters/spar_senior_instructor_phase2.jpg',
+        phase2Config: {
+            hpThreshold: 0.3,  // HP 30% 이하 시 2페이즈
+            pAtkBonus: 10,     // 물리공격력 +10
+            activateSkill: 'will_sword'  // 투지의 검 스킬 자동 발동
+        }
     },
 
     // ===== 버려진 마을 몬스터 =====
@@ -1747,17 +2086,18 @@ const MONSTERS = {
     },
     rat_swarm: {
         id: 'rat_swarm',
-        name: '쥐떼',
+        name: '감염된 쥐',
         type: 'normal',
         tier: 1,
         hp: 40, atk: 12, pDef: 1, mDef: 1,
         exp: 15, gold: 8,
         drops: [{ item: 'rat_tail', chance: 0.5 }],
-        emoji: '🐀'
+        emoji: '🐀',
+        minSpawn: 2  // 최소 2마리 이상 출현 (최대는 전투 10마리 제한에 따름)
     },
     bandit: {
         id: 'bandit',
-        name: '도적',
+        name: '약탈자',
         type: 'normal',
         tier: 2,
         hp: 100, atk: 20, pDef: 4, mDef: 2,
@@ -2715,6 +3055,133 @@ const MONSTERS = {
             description: '마왕이 지옥의 불꽃을 소환하여 모든 것을 태운다.',
             effect: { type: 'aoe_damage', damageMultiplier: 3.0 }
         }]
+    },
+
+    // ===== 대련용 교관 몬스터 =====
+    // 훈련교관2 (궁수) - 초급훈련장
+    spar_instructor2: {
+        id: 'spar_instructor2',
+        name: '훈련교관2',
+        type: 'spar',
+        tier: 3,
+        hp: 300, maxHp: 300,
+        mp: 50, maxMp: 50,
+        pAtk: 30, mAtk: 0,
+        pDef: 14, mDef: 8,
+        efficiency: 5, evasion: 5,
+        exp: 0, gold: 0,
+        drops: [],
+        emoji: '🏹',
+        isSpar: true,
+        sparClass: 'archer',
+        trait: 'hawks_eye',
+        skills: ['multishot', 'charge_shot'],
+        aiPattern: {
+            attack: 60,
+            skill: 30,
+            defend: 10,
+            mpRegenPercent: 3
+        },
+        dialogues: {
+            start: '내 실력을 시험해보고 싶은가? 좋아, 덤벼라!',
+            victory: '아직 멀었군. 더 수련하게.',
+            defeat: '훌륭하군! 네 실력을 인정하겠다.'
+        }
+    },
+
+    // 훈련교관3 (마법사) - 중급훈련장
+    spar_instructor3: {
+        id: 'spar_instructor3',
+        name: '훈련교관3',
+        type: 'spar',
+        tier: 4,
+        hp: 200, maxHp: 200,
+        mp: 80, maxMp: 80,
+        pAtk: 0, mAtk: 30,
+        pDef: 7, mDef: 12,
+        efficiency: 0, evasion: 0,
+        exp: 0, gold: 0,
+        drops: [],
+        emoji: '🔮',
+        isSpar: true,
+        sparClass: 'mage',
+        trait: 'meditation',
+        skills: ['fireball', 'lightning_bolt'],
+        damageType: 'magical',
+        aiPattern: {
+            attack: 60,
+            skill: 30,
+            defend: 10,
+            mpRegenPercent: 3
+        },
+        dialogues: {
+            start: '나와 겨뤄보겠다고? 마법의 위력을 보여주지.',
+            victory: '마법의 힘 앞에 무력하군.',
+            defeat: '대단한 실력이야. 마법도 무시할 수 없지.'
+        }
+    },
+
+    // 훈련교관4 (도적) - 상급훈련장
+    spar_instructor4: {
+        id: 'spar_instructor4',
+        name: '훈련교관4',
+        type: 'spar',
+        tier: 5,
+        hp: 380, maxHp: 380,
+        mp: 50, maxMp: 50,
+        pAtk: 30, mAtk: 0,
+        pDef: 16, mDef: 13,
+        efficiency: 10, evasion: 10,
+        exp: 0, gold: 0,
+        drops: [],
+        emoji: '🗡️',
+        isSpar: true,
+        sparClass: 'skirmisher',
+        trait: 'swift',
+        skills: ['rapid_slash', 'ambush'],
+        aiPattern: {
+            attack: 60,
+            skill: 30,
+            defend: 10,
+            mpRegenPercent: 3
+        },
+        dialogues: {
+            start: '내 속도를 따라올 수 있겠나? 한번 해보자.',
+            victory: '느리군. 속도가 생명이야.',
+            defeat: '재빠르구만. 내가 인정하겠다.'
+        }
+    },
+
+    // 상급교관 (전사) - 상급교관의 집
+    spar_senior_instructor: {
+        id: 'spar_senior_instructor',
+        name: '상급교관',
+        type: 'spar',
+        tier: 6,
+        hp: 500, maxHp: 500,
+        mp: 70, maxMp: 70,
+        pAtk: 40, mAtk: 0,
+        pDef: 20, mDef: 18,
+        efficiency: 0, evasion: 5,
+        exp: 0, gold: 0,
+        drops: [],
+        emoji: '⚔️',
+        isSpar: true,
+        sparClass: 'warrior',
+        trait: 'unyielding',
+        skills: ['smash', 'spirit_sword'],
+        aiPattern: {
+            attack: 60,
+            skill: 30,
+            defend: 10,
+            mpRegenPercent: 3
+        },
+        dialogues: {
+            start: '자네 강하구만, 이제부터 진심으로 상대해주지.',
+            lowHp: '이런 느낌으로... 투지의 검!',
+            victory: '아직 나를 이기기엔 역부족이군.',
+            defeat: '놀랍군... 네가 이겼다.'
+        }
     }
 };
 
@@ -2738,8 +3205,8 @@ const ITEM_RARITY = {
 const HUNGER_CONFIG = {
     maxHunger: 100,
     maxThirst: 100,
-    hungerDecreasePerMinute: 1,    // 분당 포만감 감소
-    thirstDecreasePerMinute: 1.5,  // 분당 수분 감소
+    hungerDecreasePerMinute: 1,    // 현실 1분(게임 2시간)당 포만감 1% 감소
+    thirstDecreasePerMinute: 1,    // 현실 1분(게임 2시간)당 수분 1% 감소
     lowThreshold: 30,              // 이 이하면 디버프
     criticalThreshold: 10,         // 심각한 디버프
     debuffs: {
@@ -2787,15 +3254,18 @@ const NPCS = {
         id: 'instructor2',
         name: '훈련교관2',
         location: 'training.beginner_field',
-        emoji: '👨‍🏫',
-        description: '초급훈련장을 담당하는 교관입니다.',
+        emoji: '🏹',
+        description: '초급훈련장을 담당하는 궁수 교관입니다. 활을 주무기로 다룹니다.',
         dialogues: {
-            greeting: '초급훈련장에 온 것을 환영한다! 낡은 허수아비부터 시작해보게.',
+            greeting: '초급훈련장에 온 것을 환영한다! 활을 다루는 법을 잘 익혀두게.',
             info: '여기서는 낡은 허수아비와 일반 허수아비를 상대할 수 있어. 기초를 다지기 좋지.',
-            quest: '허수아비 5마리를 처치해 보게. 그러면 내가 보상을 주겠네.'
+            quest: '허수아비 5마리를 처치해 보게. 그러면 내가 보상을 주겠네.',
+            spar: '내 실력을 시험해보고 싶은가? 좋아, 덤벼라!'
         },
         canGiveQuest: true,
         canTrade: false,
+        canSpar: true,
+        sparMonster: 'spar_instructor2',
         quests: ['defeat_scarecrows_5']
     },
 
@@ -2820,15 +3290,18 @@ const NPCS = {
         id: 'instructor3',
         name: '훈련교관3',
         location: 'training.intermediate_field',
-        emoji: '👩‍🏫',
-        description: '중급훈련장을 담당하는 교관입니다.',
+        emoji: '🔮',
+        description: '중급훈련장을 담당하는 마법사 교관입니다. 마법공격을 합니다.',
         dialogues: {
-            greeting: '중급훈련장에 온 것을 환영한다. 여기서는 더 강한 허수아비들이 기다리고 있지.',
+            greeting: '중급훈련장에 온 것을 환영한다. 마법의 힘을 보여주겠다.',
             info: '튼튼한 허수아비와 거대 허수아비를 상대해야 해. 준비는 됐나?',
-            quest: '거대 허수아비를 3마리 처치해 보게.'
+            quest: '거대 허수아비를 3마리 처치해 보게.',
+            spar: '나와 겨뤄보겠다고? 마법의 위력을 보여주지.'
         },
         canGiveQuest: true,
         canTrade: false,
+        canSpar: true,
+        sparMonster: 'spar_instructor3',
         quests: ['defeat_giant_scarecrows_3']
     },
 
@@ -2853,15 +3326,18 @@ const NPCS = {
         id: 'instructor4',
         name: '훈련교관4',
         location: 'training.advanced_field',
-        emoji: '🧔',
-        description: '상급훈련장을 총괄하는 베테랑 교관입니다.',
+        emoji: '🗡️',
+        description: '상급훈련장을 총괄하는 도적 교관입니다. 재빠르고, 물리공격을 합니다.',
         dialogues: {
-            greeting: '상급훈련장이다. 여기까지 왔다면 실력이 좀 되는 것 같군.',
+            greeting: '상급훈련장이다. 빠르고 정확한 공격이 필요하지.',
             info: '훈련용 로봇과 훈련용 골렘을 상대해야 한다. 골렘은 보스급이니 각오해라.',
-            quest: '훈련용 골렘을 1마리 처치해 보게. 그러면 특별한 보상을 주겠다.'
+            quest: '훈련용 골렘을 1마리 처치해 보게. 그러면 특별한 보상을 주겠다.',
+            spar: '내 속도를 따라올 수 있겠나? 한번 해보자.'
         },
         canGiveQuest: true,
         canTrade: false,
+        canSpar: true,
+        sparMonster: 'spar_instructor4',
         quests: ['defeat_training_golem']
     },
 
@@ -2939,16 +3415,19 @@ const NPCS = {
         id: 'senior_instructor',
         name: '상급교관',
         location: 'training.senior_instructor_house',
-        emoji: '🧙',
-        description: '훈련장의 최고 교관입니다. 특별한 퀘스트와 이벤트를 제공합니다.',
+        emoji: '⚔️',
+        description: '훈련장의 최고 전사 교관입니다. 물리공격을 합니다. 체력이 30% 미만으로 떨어지면 대화를 합니다.',
         dialogues: {
-            greeting: '오, 여기까지 찾아왔군. 관심이 있나 보구나.',
+            greeting: '여기까지 왔다니 대단하군. 나는 상급교관이다.',
             info: '나는 특별한 임무를 줄 수 있네. 준비가 되면 말해주게.',
             quest: '훈련장을 졸업하고 싶다면 내 시험을 통과해야 하네. 어떤가, 도전해볼 텐가?',
+            spar: '자네 강하구만, 이제부터 진심으로 상대해주지.',
             special_event: '오늘은 특별한 날이군. 너에게 특별한 선물을 주겠네.'
         },
         canGiveQuest: true,
         canTrade: false,
+        canSpar: true,
+        sparMonster: 'spar_senior_instructor',
         quests: ['training_graduation_exam'],
         hasSpecialEvents: true
     },

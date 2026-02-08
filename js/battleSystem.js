@@ -40,12 +40,63 @@ function startBattle(monsterTypes) {
     // 배열이 아니면 배열로 변환 (하위 호환성)
     const monsterTypeArray = Array.isArray(monsterTypes) ? monsterTypes : [monsterTypes];
     
-    // 몬스터들 생성
+    // 전투당 최대 몬스터 수
+    const MAX_MONSTERS = 10;
+    
+    // 몬스터들 생성 (minSpawn 처리, 전체 10마리 제한)
     const monsters = [];
     for (const monsterType of monsterTypeArray) {
-        const monster = createBattleMonster(monsterType);
+        // 이미 최대 수량이면 더 이상 생성하지 않음
+        if (monsters.length >= MAX_MONSTERS) break;
+        
+        // 객체가 직접 전달된 경우 (대련 시스템 등)
+        let monster;
+        if (typeof monsterType === 'object' && monsterType !== null) {
+            // 대련용 몬스터 객체 직접 사용
+            monster = {
+                ...monsterType,
+                hp: monsterType.currentHp || monsterType.hp,
+                maxHp: monsterType.hp,
+                currentHp: monsterType.currentHp || monsterType.hp,
+                currentMp: monsterType.currentMp || monsterType.maxMp || 0
+            };
+            console.log('📦 대련 몬스터 객체 직접 사용:', monster.name);
+        } else {
+            // 문자열 ID로 몬스터 생성
+            monster = createBattleMonster(monsterType);
+        }
+        
         if (monster) {
-            monsters.push(monster);
+            // minSpawn 속성이 있으면 추가 몬스터 생성
+            const minSpawn = monster.minSpawn || 1;
+            
+            if (minSpawn > 1) {
+                // 남은 슬롯 계산
+                const remainingSlots = MAX_MONSTERS - monsters.length;
+                
+                // 최소값을 보장하되, 최대 10마리 제한을 넘지 않도록
+                // 랜덤 범위: minSpawn ~ 남은 슬롯 (최대 10개 - 현재 마리수)
+                const actualMin = Math.min(minSpawn, remainingSlots);
+                const actualMax = remainingSlots;
+                
+                // 랜덤으로 출현 마리수 결정 (minSpawn ~ 남은 슬롯)
+                const spawnCount = Math.floor(Math.random() * (actualMax - actualMin + 1)) + actualMin;
+                
+                // 첫 번째는 이미 생성됨
+                monsters.push(monster);
+                
+                // 추가 몬스터 생성 (2번째부터)
+                for (let i = 1; i < spawnCount && monsters.length < MAX_MONSTERS; i++) {
+                    const additionalMonster = createBattleMonster(monsterType);
+                    if (additionalMonster) {
+                        // 각 몬스터에 고유 ID 부여 (구분용)
+                        additionalMonster.instanceId = `${monsterType}_${i + 1}`;
+                        monsters.push(additionalMonster);
+                    }
+                }
+            } else {
+                monsters.push(monster);
+            }
         }
     }
 
@@ -77,19 +128,28 @@ function startBattle(monsterTypes) {
         });
     }
 
+    // 특성 상태 초기화 (전투 시작)
+    resetTraitStateForBattle();
+
+    // 대련 배경 적용
+    if (battleState.sparBackground) {
+        applyBattleBackground(battleState.sparBackground);
+    }
+
     // 전투 UI 표시
     showBattleUI();
     updateBattleUI();
 
     // 조우 메시지
     if (monsters.length === 1) {
+        const coloredName = getMonsterNameWithColor(monsters[0]);
         if (hasBoss) {
-            addGameLog(`🔥 보스 ${monsters[0].name}과(와) 전투 시작! (도주 불가)`);
+            addGameLog(`🔥 보스 ${coloredName}과(와) 전투 시작! (도주 불가)`);
         } else {
-            addGameLog(`⚔️ ${monsters[0].name}과(와) 전투 시작!`);
+            addGameLog(`⚔️ ${coloredName}과(와) 전투 시작!`);
         }
     } else {
-        const monsterNames = monsters.map(m => m.name).join(', ');
+        const monsterNames = monsters.map(m => getMonsterNameWithColor(m)).join(', ');
         if (hasBoss) {
             addGameLog(`🔥 ${monsters.length}마리의 몬스터와 전투 시작! (${monsterNames}) [도주 불가]`);
         } else {
@@ -97,22 +157,74 @@ function startBattle(monsterTypes) {
         }
     }
 
+    // 첫 턴 특성 효과 즉시 발동 (신속 등)
+    processTraitEffectsOnTurnStart();
+
     console.log('⚔️ 전투 시작 완료, battleState:', battleState);
 }
 
 /**
- * 현재 난이도 배율을 반환합니다.
+ * 현재 난이도 배율을 반환합니다. (체력/공격력 분리)
  */
-function getDifficultyMultiplier() {
-    if (typeof player !== 'undefined' && player.difficulty && DIFFICULTY[player.difficulty]) {
-        return DIFFICULTY[player.difficulty].multiplier;
+function getDifficultyMultipliers() {
+    const diff = (typeof player !== 'undefined' && player.difficulty) ? player.difficulty : (typeof currentDifficulty !== 'undefined' ? currentDifficulty : 'normal');
+    if (typeof DIFFICULTY !== 'undefined' && DIFFICULTY[diff]) {
+        return {
+            hp: DIFFICULTY[diff].hpMultiplier || 1.0,
+            atk: DIFFICULTY[diff].atkMultiplier || 1.0
+        };
     }
-    return 1.0;
+    return { hp: 1.0, atk: 1.0 };
+}
+
+/**
+ * 몬스터 등급을 결정합니다.
+ */
+function rollMonsterGrade() {
+    const diff = (typeof player !== 'undefined' && player.difficulty) ? player.difficulty : (typeof currentDifficulty !== 'undefined' ? currentDifficulty : 'normal');
+    const gradeChance = (typeof DIFFICULTY !== 'undefined' && DIFFICULTY[diff]?.gradeChance) || { common: 1.0 };
+    
+    const roll = Math.random();
+    let cumulative = 0;
+    
+    for (const [grade, chance] of Object.entries(gradeChance)) {
+        cumulative += chance;
+        if (roll < cumulative) {
+            return grade;
+        }
+    }
+    return 'common';
+}
+
+/**
+ * 몬스터 이름에 등급 색상을 적용합니다.
+ * @param {Object} monster - 몬스터 객체 (gradeData 포함)
+ * @returns {string} - HTML 스타일이 적용된 몬스터 이름
+ */
+function getMonsterNameWithColor(monster) {
+    if (!monster) return '???';
+    
+    const name = monster.name || '???';
+    const gradeData = monster.gradeData;
+    
+    // 보스는 특별 색상 (빨강)
+    if (monster.isBoss) {
+        return `<span style="color: #e74c3c; font-weight: bold;">${name}</span>`;
+    }
+    
+    // 등급 데이터가 없거나 일반 등급이면 그냥 이름 반환
+    if (!gradeData || gradeData.id === 'common') {
+        return name;
+    }
+    
+    // 등급별 색상 적용
+    return `<span style="color: ${gradeData.color}; font-weight: bold;">${name}</span>`;
 }
 
 /**
  * 전투용 몬스터를 생성합니다.
  * MONSTERS 데이터에서 가져오거나 기본 템플릿 사용
+ * 등급 시스템 적용: 난이도 배율 × 등급 배율
  */
 function createBattleMonster(monsterType) {
     let template = null;
@@ -154,17 +266,42 @@ function createBattleMonster(monsterType) {
         };
     }
 
-    // 난이도 배율 적용
-    const diffMultiplier = getDifficultyMultiplier();
+    // 난이도 배율 적용 (체력/공격력 분리)
+    const diffMultipliers = getDifficultyMultipliers();
 
+    // 등급 결정 (보스는 별도 'boss' 등급)
+    const grade = template.isBoss ? 'boss' : rollMonsterGrade();
+    const gradeData = (typeof MONSTER_GRADE !== 'undefined' && MONSTER_GRADE[grade]) 
+        ? MONSTER_GRADE[grade] 
+        : { id: 'common', name: '일반', color: '#FFFFFF', hpMultiplier: 1.0, atkMultiplier: 1.0, expMultiplier: 1.0, goldMultiplier: 1.0, icon: '' };
+
+    // 최종 배율 계산 (난이도 × 등급)
+    const finalHpMult = diffMultipliers.hp * gradeData.hpMultiplier;
+    const finalAtkMult = diffMultipliers.atk * gradeData.atkMultiplier;
+
+    // 특성 확률 처리 (possibleTraits)
+    const activeTraits = [];
+    if (template.possibleTraits && Array.isArray(template.possibleTraits)) {
+        template.possibleTraits.forEach(traitDef => {
+            const roll = Math.random();
+            if (roll < traitDef.chance) {
+                activeTraits.push(traitDef.id);
+            }
+        });
+    }
+
+    // 스탯 계산 (소수점 올림 처리)
     return {
         ...template,
-        hp: Math.floor((template.hp || 50) * diffMultiplier),
-        maxHp: Math.floor((template.hp || 50) * diffMultiplier),
-        atk: Math.floor((template.atk || 10) * diffMultiplier),
-        def: Math.floor((template.def || 5) * diffMultiplier),
-        exp: Math.floor((template.exp || 10) * diffMultiplier),
-        gold: Math.floor((template.gold || 5) * diffMultiplier)
+        grade: grade,
+        gradeData: gradeData,
+        hp: Math.ceil((template.hp || 50) * finalHpMult),
+        maxHp: Math.ceil((template.hp || 50) * finalHpMult),
+        atk: Math.ceil((template.atk || 10) * finalAtkMult),
+        def: Math.ceil((template.def || 5) * finalHpMult),
+        exp: Math.ceil((template.exp || 10) * gradeData.expMultiplier),
+        gold: Math.ceil((template.gold || 5) * gradeData.goldMultiplier),
+        traits: activeTraits  // 활성화된 특성 배열
     };
 }
 
@@ -219,11 +356,12 @@ function endBattle(result) {
             if (currentMapData && currentMapData.noDeathZone) {
                 // 훈련장처럼 사망하지 않는 지역
                 handleNoDeathZoneDefeat(currentMapData, monster);
+                return;  // 패배 처리 중이므로 즉시 종료
             } else {
                 // 일반 사망 처리 - 게임오버 화면으로 이동
                 showGameOverScreen();
+                return;  // 게임오버 화면 전환 중이므로 즉시 종료
             }
-            break;
 
         case 'escape':
             addGameLog('🏃 전투에서 도망쳤습니다.');
@@ -301,6 +439,21 @@ function showGameOverScreen() {
 function handleNoDeathZoneDefeat(mapData, monster) {
     const reviveLocation = mapData.reviveLocation || 'rest_area';
     const reviveTimeHours = mapData.reviveTimeHours || 7;
+
+    // 전투 상태 초기화 (대련 패배 후 재대련 가능하도록)
+    battleState = {
+        inBattle: false,
+        turn: 'player',
+        currentMonster: null,
+        monsters: [],
+        currentMonsterIndex: 0,
+        isDefending: false,
+        canEscape: true,
+        turnCount: 0,
+        isSpar: false,
+        sparNpc: null,
+        sparBackground: null
+    };
 
     // 전투 UI 숨기기
     hideBattleUI();
@@ -480,12 +633,14 @@ function doBattleAttack() {
     const damage = calculateDamage(player, targetMonster, false);
 
     targetMonster.hp -= damage;
-    addGameLog(`⚔️ ${player.name}의 공격! ${targetMonster.name}에게 ${damage} 데미지!`);
+    addGameLog(`⚔️ ${player.name}의 공격! ${getMonsterNameWithColor(targetMonster)}에게 ${damage} 데미지!`);
 
-    // 몬스터 처치 확인
+    // 상급교관 2페이즈 체크 (HP 30% 이하 시 강화)
+    checkSeniorInstructorPhase2(targetMonster);
+
     if (targetMonster.hp <= 0) {
         targetMonster.hp = 0;
-        addGameLog(`💀 ${targetMonster.name}을(를) 처치했습니다!`);
+        addGameLog(`💀 ${getMonsterNameWithColor(targetMonster)}을(를) 처치했습니다!`);
         
         // 모든 몬스터 처치 확인
         const aliveMonsters = battleState.monsters.filter(m => m.hp > 0);
@@ -662,12 +817,12 @@ function useSelectedSkill(skillId) {
         targetMonster.hp -= damage;
 
         if (attackCount > 1) {
-            addGameLog(`⚡ ${skill.name} ${i + 1}타! ${targetMonster.name}에게 ${damage} ${damageType === 'magical' ? '마법' : '물리'} 데미지!`);
+            addGameLog(`⚡ ${skill.name} ${i + 1}타! ${getMonsterNameWithColor(targetMonster)}에게 ${damage} ${damageType === 'magical' ? '마법' : '물리'} 데미지!`);
         }
     }
 
     if (attackCount === 1) {
-        addGameLog(`⚡ ${player.name}의 ${skill.name}! ${targetMonster.name}에게 ${totalDamage} ${damageType === 'magical' ? '마법' : '물리'} 데미지!`);
+        addGameLog(`⚡ ${player.name}의 ${skill.name}! ${getMonsterNameWithColor(targetMonster)}에게 ${totalDamage} ${damageType === 'magical' ? '마법' : '물리'} 데미지!`);
     } else {
         addGameLog(`💥 총 ${totalDamage} 데미지!`);
     }
@@ -677,10 +832,9 @@ function useSelectedSkill(skillId) {
         applyStatusEffect(targetMonster, skill.effects.statusEffect, skill.effects.statusDuration, totalDamage);
     }
 
-    // 몬스터 처치 확인
     if (targetMonster.hp <= 0) {
         targetMonster.hp = 0;
-        addGameLog(`💀 ${targetMonster.name}을(를) 처치했습니다!`);
+        addGameLog(`💀 ${getMonsterNameWithColor(targetMonster)}을(를) 처치했습니다!`);
         
         // 모든 몬스터 처치 확인
         const aliveMonsters = battleState.monsters.filter(m => m.hp > 0);
@@ -716,7 +870,7 @@ function applyStatusEffect(target, effectId, duration, damage = 0) {
         damage: damage  // 화상용 피해량 저장
     };
 
-    addGameLog(`${effect.icon} ${target.name}에게 ${effect.name} 상태이상 부여! (${duration}턴)`);
+    addGameLog(`${effect.icon} ${getMonsterNameWithColor(target)}에게 ${effect.name} 상태이상 부여! (${duration}턴)`);
 }
 
 /**
@@ -746,17 +900,17 @@ function processMonsterStatusEffects(monster) {
             case 'bleed': // 출혈: 최대HP의 4% 피해 (방어 무시)
                 damage = Math.max(1, Math.round(monster.maxHp * (effectInfo.effects.hpPercent / 100)));
                 monster.hp -= damage;
-                addGameLog(`🩸 ${monster.name}이(가) 출혈로 ${damage} 피해!`);
+                addGameLog(`🩸 ${getMonsterNameWithColor(monster)}이(가) 출혈로 ${damage} 피해!`);
                 break;
 
             case 'burn': // 화상: 받은 피해의 20% 마법 피해
                 damage = Math.max(1, Math.round(effectData.damage * (effectInfo.effects.damagePercent / 100)));
                 monster.hp -= damage;
-                addGameLog(`🔥 ${monster.name}이(가) 화상으로 ${damage} 피해!`);
+                addGameLog(`🔥 ${getMonsterNameWithColor(monster)}이(가) 화상으로 ${damage} 피해!`);
                 break;
 
             case 'confusion': // 혼란: 특별한 턴 효과 없음 (공격 시 적용)
-                addGameLog(`😵 ${monster.name}은(는) 혼란 상태!`);
+                addGameLog(`😵 ${getMonsterNameWithColor(monster)}은(는) 혼란 상태!`);
                 break;
         }
 
@@ -765,7 +919,7 @@ function processMonsterStatusEffects(monster) {
 
         if (effectData.duration <= 0) {
             effectsToRemove.push(effectId);
-            addGameLog(`💨 ${monster.name}의 ${effectInfo.name} 효과가 사라졌다!`);
+            addGameLog(`💨 ${getMonsterNameWithColor(monster)}의 ${effectInfo.name} 효과가 사라졌다!`);
         }
 
         // 상태이상으로 처치 확인
@@ -892,24 +1046,67 @@ function doBattleHeal() {
 
 /**
  * 도주
+ * - 훈련장: 대련 제외 100% 도주
+ * - 일반 맵: 기본 80% + 민첩 5당 +1%
+ * - 대련, 보스방, 특수방: 도주 불가
  */
 function doBattleEscape() {
     if (!battleState.inBattle || battleState.turn !== 'player') return;
 
+    // 대련 중일 경우 도주 불가
+    if (battleState.isSpar) {
+        addGameLog('🚫 대련 중에는 도망칠 수 없습니다!');
+        return;
+    }
+
+    // 도주 불가 지역 체크 (보스방, 특수방 등)
     if (!battleState.canEscape) {
         addGameLog('🚫 이 전투에서는 도망칠 수 없습니다!');
         return;
     }
 
-    const escapeChance = 70;
+    // 도주 확률 계산
+    let escapeChance = calculateEscapeChance();
     const roll = Math.random() * 100;
 
     if (roll < escapeChance) {
+        addGameLog(`🏃 도주 성공! (확률: ${escapeChance.toFixed(0)}%)`);
         endBattle('escape');
     } else {
-        addGameLog('🏃 도주 실패!');
+        addGameLog(`🏃 도주 실패! (확률: ${escapeChance.toFixed(0)}%)`);
         endPlayerTurn();
     }
+}
+
+/**
+ * 도주 확률을 계산합니다.
+ * @returns {number} 도주 확률 (0~100)
+ */
+function calculateEscapeChance() {
+    // 현재 맵 확인
+    const currentMapId = player.currentMap || 'training';
+    
+    // 훈련장일 경우 100% 도주 (대련 제외 - 대련은 위에서 이미 체크)
+    if (currentMapId === 'training') {
+        return 100;
+    }
+    
+    // 기본 도주 확률 80%
+    let baseChance = 80;
+    
+    // 민첩 스탯 보너스: 5당 +1%
+    const agility = player.agility || 0;
+    const agilityBonus = Math.floor(agility / 5);
+    
+    // 신속 특성 보너스 (도적)
+    let traitBonus = 0;
+    if (player.trait === 'swift') {
+        traitBonus = 10; // 신속 특성: +10% 도주 확률
+    }
+    
+    // 최종 도주 확률 (최대 100%)
+    let finalChance = baseChance + agilityBonus + traitBonus;
+    return Math.min(100, finalChance);
 }
 
 // ============================================
@@ -948,32 +1145,72 @@ function doMonsterTurn() {
         
         const monster = aliveMonsters[attackIndex];
         
-        // 회피 체크
-        const evasionRoll = Math.random() * 100;
-        if (evasionRoll < (player.evasion || 0)) {
-            addGameLog(`💫 ${player.name}이(가) ${monster.name}의 공격을 회피했다!`);
-        } else {
-            // 몬스터 공격 (피해 타입 적용)
-            // 혼란 상태면 calculateMonsterDamage에서 데미지 배수가 감소됨
-            const damageType = monster.damageType || 'physical';
-            let damage = calculateMonsterDamage(monster, player, damageType);
-
-            // 방어 중이면 데미지 감소
-            if (battleState.isDefending) {
-                const defenseMultiplier = 2.5 + Math.random();
-                const baseDef = damageType === 'magical' ?
-                    (player.mDef || 0) + (player.bonusMDef || 0) :
-                    (player.pDef || 0) + (player.bonusPDef || 0);
-                const additionalDef = Math.floor(baseDef * defenseMultiplier);
-                damage = Math.max(1, damage - additionalDef);
-                
-                if (attackIndex === 0) {
-                    addGameLog(`🛡️ 방어로 피해 감소!`);
+        // 자가수복 특성 처리: 매 턴당 최대HP의 3% 회복
+        if (monster.traits && monster.traits.includes('self_repair') && monster.hp < monster.maxHp) {
+            const healAmount = Math.floor(monster.maxHp * 0.03);
+            const actualHeal = Math.min(healAmount, monster.maxHp - monster.hp);
+            monster.hp += actualHeal;
+            addGameLog(`🔧 ${monster.name}의 자가수복! HP +${actualHeal} 회복!`);
+            updateBattleUI();
+        }
+        
+        // 대련 몬스터인 경우 턴당 MP 회복 및 AI 행동 결정
+        if (monster.isSpar && monster.aiPattern) {
+            // 턴당 MP 3% 회복
+            const mpRegen = Math.floor((monster.maxMp || 0) * (monster.aiPattern.mpRegenPercent || 3) / 100);
+            monster.currentMp = Math.min(monster.currentMp + mpRegen, monster.maxMp || 0);
+            
+            // AI 행동 결정 (일반공격 60%, 스킬 30%, 방어 10%)
+            const actionRoll = Math.random() * 100;
+            const attackChance = monster.aiPattern.attack || 60;
+            const skillChance = monster.aiPattern.skill || 30;
+            
+            if (actionRoll < attackChance) {
+                // 일반 공격
+                executeSparAttack(monster);
+            } else if (actionRoll < attackChance + skillChance) {
+                // 스킬 사용 시도
+                if (!tryUseSparSkill(monster)) {
+                    // 스킬 사용 불가시 일반공격 또는 방어
+                    if (Math.random() < 0.7) {
+                        executeSparAttack(monster);
+                    } else {
+                        executeSparDefend(monster);
+                    }
                 }
+            } else {
+                // 방어
+                executeSparDefend(monster);
             }
+        } else {
+            // 기존 몬스터 공격 로직
+            // 회피 체크
+            const evasionRoll = Math.random() * 100;
+            if (evasionRoll < (player.evasion || 0)) {
+                addGameLog(`💫 ${player.name}이(가) ${getMonsterNameWithColor(monster)}의 공격을 회피했다!`);
+            } else {
+                // 몬스터 공격 (피해 타입 적용)
+                // 혼란 상태면 calculateMonsterDamage에서 데미지 배수가 감소됨
+                const damageType = monster.damageType || 'physical';
+                let damage = calculateMonsterDamage(monster, player, damageType);
 
-            player.hp -= damage;
-            addGameLog(`👹 ${monster.name}의 ${damageType === 'magical' ? '마법 ' : ''}공격! ${damage} 데미지!`);
+                // 방어 중이면 데미지 감소
+                if (battleState.isDefending) {
+                    const defenseMultiplier = 2.5 + Math.random();
+                    const baseDef = damageType === 'magical' ?
+                        (player.mDef || 0) + (player.bonusMDef || 0) :
+                        (player.pDef || 0) + (player.bonusPDef || 0);
+                    const additionalDef = Math.floor(baseDef * defenseMultiplier);
+                    damage = Math.max(1, damage - additionalDef);
+                    
+                    if (attackIndex === 0) {
+                        addGameLog(`🛡️ 방어로 피해 감소!`);
+                    }
+                }
+
+                player.hp -= damage;
+                addGameLog(`👹 ${getMonsterNameWithColor(monster)}의 ${damageType === 'magical' ? '마법 ' : ''}공격! ${damage} 데미지!`);
+            }
         }
         
         // 공격 후 상태이상 피해 및 지속시간 처리 (출혈, 화상 등)
@@ -1017,10 +1254,288 @@ function finishMonsterTurn() {
     // 턴 시작 시 HP/MP 자연회복
     applyNaturalRegen();
 
+    // 특성 효과 적용 (턴 시작 시)
+    processTraitEffectsOnTurnStart();
+
     addGameLog(`--- 턴 ${battleState.turnCount} ---`);
 
     // 버튼 활성화
     enableBattleButtons(true);
+}
+
+// ============================================
+// ⚔️ 대련 AI 시스템
+// ============================================
+
+/**
+ * 대련 몬스터의 일반 공격을 실행합니다.
+ */
+function executeSparAttack(monster) {
+    // 회피 체크
+    const evasionRoll = Math.random() * 100;
+    if (evasionRoll < (player.evasion || 0)) {
+        addGameLog(`💫 ${player.name}이(가) ${monster.name}의 공격을 회피했다!`);
+        updateBattleUI();
+        return;
+    }
+
+    // 공격력 계산
+    const damageType = monster.damageType || 'physical';
+    const atk = damageType === 'magical' ? (monster.mAtk || monster.pAtk || 20) : (monster.pAtk || monster.atk || 20);
+    const def = damageType === 'magical' ? 
+        (player.mDef || 0) + (player.bonusMDef || 0) : 
+        (player.pDef || 0) + (player.bonusPDef || 0);
+    
+    let damage = Math.max(1, atk - Math.floor(def * 0.5));
+    
+    // 방어 중이면 데미지 감소
+    if (battleState.isDefending) {
+        damage = Math.max(1, Math.floor(damage * 0.4));
+        addGameLog(`🛡️ 방어로 피해 감소!`);
+    }
+
+    player.hp -= damage;
+    if (player.hp < 0) player.hp = 0;
+    
+    addGameLog(`⚔️ ${monster.name}의 ${damageType === 'magical' ? '마법 ' : ''}공격! ${damage} 데미지!`);
+    updateBattleUI();
+}
+
+/**
+ * 대련 몬스터의 스킬 사용을 시도합니다.
+ * @returns {boolean} 스킬 사용 성공 여부
+ */
+function tryUseSparSkill(monster) {
+    if (!monster.skills || monster.skills.length === 0) return false;
+    
+    // 사용 가능한 스킬 찾기 (MP, 쿨타임 체크)
+    const availableSkills = [];
+    
+    monster.skills.forEach(skillId => {
+        const skill = SKILLS ? SKILLS[skillId] : null;
+        if (!skill) return;
+        
+        // 쿨타임 체크
+        if (monster.cooldowns && monster.cooldowns[skillId] > 0) return;
+        
+        // MP 체크
+        const mpCost = skill.mpCost || 0;
+        if ((monster.currentMp || 0) < mpCost) return;
+        
+        availableSkills.push({ skillId, skill });
+    });
+    
+    if (availableSkills.length === 0) return false;
+    
+    // 랜덤 스킬 선택
+    const selected = availableSkills[Math.floor(Math.random() * availableSkills.length)];
+    const { skillId, skill } = selected;
+    
+    // MP 소모
+    monster.currentMp -= (skill.mpCost || 0);
+    
+    // 쿨타임 설정
+    if (!monster.cooldowns) monster.cooldowns = {};
+    monster.cooldowns[skillId] = skill.cooldown || 0;
+    
+    // 스킬 효과 적용
+    const damageType = skill.damageType || monster.damageType || 'physical';
+    const atk = damageType === 'magical' ? (monster.mAtk || 20) : (monster.pAtk || monster.atk || 20);
+    const damageMultiplier = skill.damageMultiplier || 1.5;
+    const baseDamage = Math.floor(atk * damageMultiplier);
+    
+    // 회피 체크
+    const evasionRoll = Math.random() * 100;
+    if (evasionRoll < (player.evasion || 0)) {
+        addGameLog(`💫 ${player.name}이(가) ${monster.name}의 ${skill.name}을(를) 회피했다!`);
+        updateBattleUI();
+        return true;
+    }
+    
+    const def = damageType === 'magical' ? 
+        (player.mDef || 0) + (player.bonusMDef || 0) : 
+        (player.pDef || 0) + (player.bonusPDef || 0);
+    
+    let damage = Math.max(1, baseDamage - Math.floor(def * 0.5));
+    
+    // 방어 중이면 데미지 감소
+    if (battleState.isDefending) {
+        damage = Math.max(1, Math.floor(damage * 0.4));
+    }
+    
+    player.hp -= damage;
+    if (player.hp < 0) player.hp = 0;
+    
+    addGameLog(`🌟 ${monster.name}의 ${skill.name}! ${damage} 데미지!`);
+    updateBattleUI();
+    
+    return true;
+}
+
+/**
+ * 대련 몬스터의 방어를 실행합니다.
+ */
+function executeSparDefend(monster) {
+    // 방어 시 다음 공격 데미지 감소 (임시 효과)
+    monster.isDefending = true;
+    addGameLog(`🛡️ ${monster.name}이(가) 방어 자세를 취했다!`);
+    updateBattleUI();
+}
+
+// ============================================
+// 🌟 특성 시스템
+// ============================================
+
+/**
+ * 턴 시작 시 특성 효과를 처리합니다.
+ */
+function processTraitEffectsOnTurnStart() {
+    if (!player.trait || typeof TRAITS === 'undefined') return;
+    
+    const trait = TRAITS[player.trait];
+    if (!trait) return;
+
+    // 명상 (마법사): 매 턴 MP 2% 회복
+    if (player.trait === 'meditation') {
+        const mpRegen = Math.ceil(player.maxMp * (trait.effects.mpRegenPercent / 100));
+        const oldMp = player.mp;
+        player.mp = Math.min(player.maxMp, player.mp + mpRegen);
+        if (player.mp > oldMp) {
+            addGameLog(`🧘 명상 효과: MP +${player.mp - oldMp} 회복`);
+        }
+    }
+
+    // 신속 (도적): 첫 턴 2회 행동, 10턴마다 재사용
+    if (player.trait === 'swift') {
+        if (!player.traitState) player.traitState = { cooldown: 0 };
+        
+        // 쿨다운 감소
+        if (player.traitState.cooldown > 0) {
+            player.traitState.cooldown--;
+        }
+        
+        // 첫 턴 또는 쿨다운 종료 시 2회 행동 활성화
+        if (battleState.turnCount === 1 || (player.traitState.cooldown === 0 && battleState.turnCount > 1)) {
+            if (!player.traitState.usedThisBattle) {
+                player.traitState.doubleAction = true;
+                player.traitState.actionsLeft = 2;
+                player.traitState.usedThisBattle = true;
+                addGameLog(`💨 신속 발동! 이번 턴에 2회 행동 가능!`);
+            }
+        }
+    }
+
+    // 불굴 특성 상태 체크 (HP 30% 이하 확인)
+    checkUnyieldingTrait();
+
+    // 불굴 지속시간 감소
+    if (player.trait === 'unyielding' && player.traitState?.active) {
+        player.traitState.duration--;
+        if (player.traitState.duration <= 0) {
+            player.traitState.active = false;
+            player.traitState.cooldown = trait.effects.cooldown || 5;
+            addGameLog(`🔥 불굴 효과가 종료되었습니다. (쿨타임 ${player.traitState.cooldown}턴)`);
+        }
+    }
+
+    // 불굴 쿨다운 감소
+    if (player.trait === 'unyielding' && !player.traitState?.active && player.traitState?.cooldown > 0) {
+        player.traitState.cooldown--;
+    }
+}
+
+/**
+ * 불굴 특성 발동 여부를 체크합니다.
+ */
+function checkUnyieldingTrait() {
+    if (player.trait !== 'unyielding' || typeof TRAITS === 'undefined') return;
+    
+    const trait = TRAITS.unyielding;
+    if (!trait) return;
+    
+    if (!player.traitState) player.traitState = { active: false, duration: 0, cooldown: 0 };
+    
+    // 이미 활성화되어 있거나 쿨다운 중이면 패스
+    if (player.traitState.active || player.traitState.cooldown > 0) return;
+    
+    // HP 30% 이하 확인
+    const hpPercent = (player.hp / player.maxHp) * 100;
+    if (hpPercent <= trait.effects.hpThreshold) {
+        player.traitState.active = true;
+        player.traitState.duration = trait.effects.duration || 4;
+        addGameLog(`🔥 불굴 발동! ${player.traitState.duration}턴간 피해 -10%, 공격력 +10%!`);
+    }
+}
+
+/**
+ * 불굴 특성에 의한 피해 보정을 계산합니다.
+ * @param {number} damage - 원래 피해량
+ * @param {boolean} isPlayerDealing - 플레이어가 가하는 피해인지 여부
+ * @returns {number} - 보정된 피해량
+ */
+function applyUnyieldingDamageModifier(damage, isPlayerDealing) {
+    if (player.trait !== 'unyielding' || !player.traitState?.active) return damage;
+    
+    const trait = TRAITS?.unyielding;
+    if (!trait) return damage;
+    
+    if (isPlayerDealing) {
+        // 가하는 피해 10% 증가
+        return Math.ceil(damage * (1 + trait.effects.damageBonus / 100));
+    } else {
+        // 받는 피해 10% 감소
+        return Math.ceil(damage * (1 - trait.effects.damageReduction / 100));
+    }
+}
+
+/**
+ * 매의 눈 특성에 의한 회피율 보정을 계산합니다.
+ * @param {number} evasion - 상대 회피율
+ * @returns {number} - 보정된 회피율
+ */
+function applyHawksEyeEvasionModifier(evasion) {
+    if (player.trait !== 'hawks_eye' || typeof TRAITS === 'undefined') return evasion;
+    
+    const trait = TRAITS.hawks_eye;
+    if (!trait) return evasion;
+    
+    // 상대 회피율 30% 무시
+    const reduction = evasion * (trait.effects.evasionPenetration / 100);
+    return Math.max(0, evasion - reduction);
+}
+
+/**
+ * 신속 특성: 행동 후 추가 행동 가능 여부 확인
+ * @returns {boolean} - 추가 행동 가능 여부
+ */
+function checkSwiftExtraAction() {
+    if (player.trait !== 'swift') return false;
+    if (!player.traitState?.doubleAction) return false;
+    
+    player.traitState.actionsLeft--;
+    
+    if (player.traitState.actionsLeft > 0) {
+        addGameLog(`💨 신속: 추가 행동 가능! (남은 행동: ${player.traitState.actionsLeft})`);
+        return true;
+    } else {
+        player.traitState.doubleAction = false;
+        player.traitState.cooldown = TRAITS?.swift?.effects?.cooldown || 10;
+        return false;
+    }
+}
+
+/**
+ * 전투 시작 시 특성 상태를 초기화합니다.
+ */
+function resetTraitStateForBattle() {
+    if (!player.traitState) player.traitState = {};
+    
+    player.traitState.active = false;
+    player.traitState.duration = 0;
+    player.traitState.doubleAction = false;
+    player.traitState.actionsLeft = 0;
+    player.traitState.usedThisBattle = false;
+    // 쿨다운은 전투 간에도 유지
 }
 
 /**
@@ -1028,6 +1543,12 @@ function finishMonsterTurn() {
  */
 function endPlayerTurn() {
     console.log('🔄 endPlayerTurn 호출');
+
+    // 신속 특성: 추가 행동이 있으면 턴을 넘기지 않음
+    if (checkSwiftExtraAction()) {
+        updateBattleUI();
+        return;
+    }
 
     battleState.turn = 'monster';
 
@@ -1061,8 +1582,8 @@ function enableBattleButtons(enabled) {
 
 /**
  * 플레이어 피해를 계산합니다. (피해 타입 분리)
- * 일반공격: 0.6~2배, 스킬: 0.7~2.3배
- * 효율 스탯이 높을수록 높은 배수 확률 증가
+ * 일반공격: 0.6~2배, 스킬: 0.7~2.5배
+ * 정확도 스탯이 높을수록 높은 배수 확률 증가
  */
 function calculateDamage(attacker, defender, isSkill, damageType = null) {
     // 피해 타입 결정 (직업 기반 또는 지정)
@@ -1078,23 +1599,23 @@ function calculateDamage(attacker, defender, isSkill, damageType = null) {
         (defender.mDef || 0) :
         (defender.pDef || 0);
 
-    // 배수 계산 (효율 스탯 적용)
+    // 배수 계산 (정확도 스탯 적용)
     let minMult, maxMult;
     if (isSkill) {
         minMult = 0.7;
-        maxMult = 2.3;
+        maxMult = 2.5;
     } else {
         minMult = 0.6;
         maxMult = 2.0;
     }
 
-    // 효율 스탯으로 배수 확률 조정
+    // 정확도 스탯으로 배수 확률 조정
     const efficiency = attacker.efficiency || 0;
     let multiplier = minMult + Math.random() * (maxMult - minMult);
 
-    // 효율이 높을수록 높은 배수가 나올 확률 증가
+    // 정확도가 높을수록 높은 배수가 나올 확률 증가
     if (efficiency > 0) {
-        const bonus = (efficiency / 100) * 0.3; // 효율 1%당 0.3% 배수 바이어스
+        const bonus = (efficiency / 100) * 0.3; // 정확도 1%당 0.3% 배수 바이어스
         multiplier = Math.min(maxMult, multiplier + bonus);
     }
 
@@ -1145,13 +1666,11 @@ function calculateMonsterDamage(monster, target, damageType = 'physical') {
 }
 
 /**
- * 난이도 배율을 반환합니다.
+ * 난이도 배율을 반환합니다. (구버전 호환용 - 평균값 반환)
  */
 function getDifficultyMultiplier() {
-    if (typeof DIFFICULTY !== 'undefined' && DIFFICULTY[currentDifficulty]) {
-        return DIFFICULTY[currentDifficulty].multiplier;
-    }
-    return 1.0;
+    const multipliers = getDifficultyMultipliers();
+    return (multipliers.hp + multipliers.atk) / 2;
 }
 
 /**
@@ -1196,10 +1715,91 @@ function checkLevelUp() {
         player.hp = player.maxHp;
         player.mp = player.maxMp;
 
+        // 식량/수분 회복
+        if (typeof player.hunger !== 'undefined') {
+            player.hunger = player.maxHunger || 100;
+        }
+        if (typeof player.thirst !== 'undefined') {
+            player.thirst = player.maxThirst || 100;
+        }
+
         addGameLog(`🎉 레벨 업! Lv.${player.level}! (스탯포인트 +${config.statPoints})`);
+
+        // 레벨 5 도달 시 스킬 습득 체크
+        if (player.level === 5) {
+            checkLevel5SkillUnlock();
+        }
 
         requiredExp = getRequiredExp(player.level);
     }
+}
+
+/**
+ * 레벨 5 스킬 해금을 확인합니다.
+ */
+function checkLevel5SkillUnlock() {
+    if (!player.job || typeof JOBS === 'undefined') return;
+    
+    const jobData = JOBS[player.job];
+    if (!jobData || !jobData.level5Skill) return;
+    
+    const skillId = jobData.level5Skill;
+    const skill = typeof SKILLS !== 'undefined' ? SKILLS[skillId] : null;
+    
+    if (!skill) return;
+    
+    // 이미 스킬을 보유하고 있는지 확인
+    if (!player.skills) player.skills = [];
+    if (player.skills.includes(skillId)) return;
+    
+    // 스킬 추가
+    player.skills.push(skillId);
+    
+    // 스킬 쿨다운 초기화
+    if (!player.skillCooldowns) player.skillCooldowns = {};
+    player.skillCooldowns[skillId] = 0;
+    
+    // 게임 로그
+    addGameLog(`🎊 <span style="color: #f1c40f; font-weight: bold;">${skill.name} Lv.1</span>을 배웠습니다!`);
+    
+    // 알림창 표시
+    showSkillLearnedModal(skill);
+}
+
+/**
+ * 스킬 습득 알림창을 표시합니다.
+ */
+function showSkillLearnedModal(skill) {
+    // 기존 모달 제거
+    const existingModal = document.getElementById('skillLearnedModal');
+    if (existingModal) existingModal.remove();
+    
+    const modal = document.createElement('div');
+    modal.id = 'skillLearnedModal';
+    modal.className = 'skill-learned-modal';
+    modal.innerHTML = `
+        <div class="skill-learned-content">
+            <div class="skill-learned-icon">${skill.icon}</div>
+            <h2>🎊 새로운 스킬 습득!</h2>
+            <div class="skill-learned-name">${skill.name} Lv.1</div>
+            <p class="skill-learned-desc">${skill.description}</p>
+            <div class="skill-learned-info">
+                <span>MP: ${skill.mpCost}</span>
+                <span>쿨타임: ${skill.cooldown}턴</span>
+            </div>
+            <button onclick="closeSkillLearnedModal()" class="skill-learned-btn">확인</button>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+}
+
+/**
+ * 스킬 습득 알림창을 닫습니다.
+ */
+function closeSkillLearnedModal() {
+    const modal = document.getElementById('skillLearnedModal');
+    if (modal) modal.remove();
 }
 
 /**
@@ -1207,15 +1807,15 @@ function checkLevelUp() {
  */
 function recalculatePlayerStats() {
     const r = typeof STATS_CONFIG !== 'undefined' ? STATS_CONFIG.ratios : {
-        hpPerVit: 2, mpPerInt: 1,
+        hpPerVit: 2, hpPerStr: 1/3, mpPerInt: 1,
         pAtkPerStr: 0.5, mAtkPerInt: 0.5,
         pDefPerStr: 1 / 6, pDefPerVit: 0.5,
         mDefPerInt: 1 / 6, mDefPerVit: 0.5,
         efficiencyPerAgi: 1 / 8, evasionPerAgi: 1 / 7, healEffPerVit: 1 / 3
     };
 
-    // HP/MP 계산
-    player.maxHp = (player.baseHp || 30) + Math.round(player.vit * r.hpPerVit) + (player.bonusHp || 0);
+    // HP/MP 계산 (근력 3당 HP +1 추가)
+    player.maxHp = (player.baseHp || 30) + Math.round(player.vit * r.hpPerVit) + Math.round(player.str * (r.hpPerStr || 0)) + (player.bonusHp || 0);
     player.maxMp = (player.baseMp || 15) + Math.round(player.int * r.mpPerInt) + (player.bonusMp || 0);
 
     // 공격력/방어력 계산
@@ -1344,6 +1944,14 @@ function hideBattleUI() {
         battleActions.style.display = 'none';
     }
 
+    // 전투 배경 초기화 (대련 배경 제거)
+    const battleArena = document.querySelector('.battle-arena');
+    if (battleArena) {
+        battleArena.style.backgroundImage = '';
+        battleArena.style.backgroundSize = '';
+        battleArena.style.backgroundPosition = '';
+    }
+
     console.log('전투 UI 숨김 완료');
 }
 
@@ -1376,10 +1984,16 @@ function updateBattleUI() {
         
         const hpPercent = Math.max(0, (monster.hp / monster.maxHp) * 100);
         
+        // 등급 정보
+        const gradeIcon = monster.gradeData?.icon || '';
+        const gradeColor = monster.gradeData?.color || '#FFFFFF';
+        const gradeName = monster.gradeData?.name || '일반';
+        const gradeDisplay = gradeName !== '일반' ? `${gradeIcon}[${gradeName}] ` : '';
+        
         monsterCard.innerHTML = `
             <div class="monster-sprite">${monster.image ? `<img src="${monster.image}" alt="${monster.name}" class="monster-image">` : (monster.emoji || '👹')}</div>
             <div class="monster-info">
-                <span class="monster-name">${monster.name}${isDead ? ' ☠️' : ''}</span>
+                <span class="monster-name" style="color: ${gradeColor}; text-shadow: 0 0 5px ${gradeColor}40;">${gradeDisplay}${monster.name}${isDead ? ' ☠️' : ''}</span>
                 <div class="bar monster-hp-bar">
                     <div class="bar-fill" style="width: ${hpPercent}%; background: ${isDead ? '#555' : 'linear-gradient(90deg, #e74c3c, #c0392b)'};"></div>
                     <span class="bar-text">${Math.max(0, monster.hp)}/${monster.maxHp}</span>
@@ -1415,6 +2029,101 @@ function selectMonsterTarget(index) {
     
     addGameLog(`🎯 ${monster.name}을(를) 대상으로 선택!`);
     updateBattleUI();
+}
+
+// ============================================
+// 🎨 대련 배경 및 상급교관 2페이즈 시스템
+// ============================================
+
+/**
+ * 전투 배경을 적용합니다.
+ * @param {string} imagePath - 배경 이미지 경로
+ */
+function applyBattleBackground(imagePath) {
+    // 전투 아레나에 배경 적용
+    const battleArena = document.querySelector('.battle-arena');
+    if (battleArena) {
+        battleArena.style.backgroundImage = `url('${imagePath}')`;
+        battleArena.style.backgroundSize = 'cover';
+        battleArena.style.backgroundPosition = 'center';
+        battleArena.style.borderRadius = '10px';
+        console.log('🎨 대련 배경 적용:', imagePath);
+    }
+    
+    // 몬스터 컨테이너에도 배경 투명하게 설정
+    const monstersContainer = document.getElementById('monstersContainer');
+    if (monstersContainer) {
+        monstersContainer.style.backgroundColor = 'transparent';
+    }
+}
+
+/**
+ * 상급교관 2페이즈 전환을 체크하고 처리합니다.
+ * @param {Object} monster - 몬스터 객체
+ */
+function checkSeniorInstructorPhase2(monster) {
+    // 상급교관이 아니거나 이미 2페이즈면 스킵
+    if (!monster.phase2Config || monster.isPhase2) return;
+    
+    const hpPercent = monster.hp / monster.maxHp;
+    
+    // HP 30% 이하 시 2페이즈 돌입
+    if (hpPercent <= monster.phase2Config.hpThreshold) {
+        monster.isPhase2 = true;
+        
+        // 2페이즈 대사 출력
+        if (monster.dialogues && monster.dialogues.phase2) {
+            addGameLog(`⚔️ ${monster.name}: "${monster.dialogues.phase2}"`);
+        }
+        
+        // 물리공격력 보너스 적용
+        if (monster.phase2Config.pAtkBonus) {
+            monster.pAtk = (monster.pAtk || 0) + monster.phase2Config.pAtkBonus;
+            addGameLog(`🔥 ${monster.name}의 물리공격력이 ${monster.phase2Config.pAtkBonus} 상승!`);
+        }
+        
+        // 투지의 검 스킬 발동 (발동중이면 지속시간 초기화)
+        if (monster.phase2Config.activateSkill === 'will_sword') {
+            // 투지의 검 효과: 공격력 증가 버프
+            if (!monster.activeBuffs) monster.activeBuffs = {};
+            
+            if (monster.activeBuffs.will_sword) {
+                // 이미 발동 중이면 지속시간 초기화
+                monster.activeBuffs.will_sword.duration = 5;  // 5턴으로 초기화
+                addGameLog(`⚔️ ${monster.name}의 투지의 검 지속시간 초기화!`);
+            } else {
+                // 새로 발동
+                monster.activeBuffs.will_sword = {
+                    name: '투지의 검',
+                    pAtkBonus: 5,  // 추가 공격력 버프
+                    duration: 5    // 5턴 지속
+                };
+                monster.pAtk = (monster.pAtk || 0) + 5;
+                addGameLog(`⚔️ ${monster.name}이(가) 투지의 검 발동! (공격력 추가 상승)`);
+            }
+        }
+        
+        // 이미지 변경
+        if (monster.phase2Image) {
+            updateMonsterImage(monster.phase2Image);
+        }
+        
+        // UI 업데이트
+        updateBattleUI();
+    }
+}
+
+/**
+ * 전투 중 몬스터 이미지를 변경합니다.
+ * @param {string} imagePath - 새 이미지 경로
+ */
+function updateMonsterImage(imagePath) {
+    const monsterImg = document.querySelector('.monster-image img') || 
+                       document.querySelector('.battle-monster-img');
+    if (monsterImg) {
+        monsterImg.src = imagePath;
+        console.log('🖼️ 몬스터 이미지 변경:', imagePath);
+    }
 }
 
 // ============================================

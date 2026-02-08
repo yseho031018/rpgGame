@@ -1291,12 +1291,13 @@ function doRest() {
 
 /**
  * 게임 로그에 메시지를 추가합니다.
+ * HTML 태그를 지원합니다 (색상 등).
  */
 function addGameLog(message) {
     const logBox = document.getElementById('gameLogBox');
     if (logBox) {
         const entry = document.createElement('p');
-        entry.textContent = message;
+        entry.innerHTML = message;  // HTML 태그 지원
         logBox.appendChild(entry);
         logBox.scrollTop = logBox.scrollHeight;
 
@@ -1305,7 +1306,8 @@ function addGameLog(message) {
         }
     }
 
-    console.log(`📝 ${message}`);
+    // 콘솔에는 태그 제거 후 출력
+    console.log(`📝 ${message.replace(/<[^>]*>/g, '')}`);
 }
 
 /**

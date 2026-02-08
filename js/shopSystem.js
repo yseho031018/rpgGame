@@ -446,6 +446,15 @@ function showNPCConversation(npc) {
         `;
     }
 
+    // 대련 가능한 경우
+    if (npc.canSpar) {
+        optionsHtml += `
+            <button class="dialog-option-btn spar-btn" onclick="startSpar('${npc.id}')">
+                ⚔️ 대련하고 싶어요
+            </button>
+        `;
+    }
+
     // 대화 종료 옵션
     optionsHtml += `
         <button class="dialog-option-btn dialog-exit" onclick="closeNPCConversation()">
@@ -542,6 +551,69 @@ function closeNPCConversation() {
     }
     currentNpc = null;
 }
+
+/**
+ * NPC와 대련을 시작합니다.
+ * @param {string} npcId - NPC ID
+ */
+function startSpar(npcId) {
+    const npc = NPCS[npcId];
+    if (!npc || !npc.canSpar || !npc.sparMonster) {
+        addGameLog('❌ 이 NPC와는 대련할 수 없습니다.');
+        return;
+    }
+
+    const sparMonster = MONSTERS[npc.sparMonster];
+    if (!sparMonster) {
+        addGameLog('❌ 대련 상대를 찾을 수 없습니다.');
+        return;
+    }
+
+    // NPC 대화 모달 닫기
+    const modal = document.querySelector('.npc-modal-overlay');
+    if (modal) modal.remove();
+    currentNpcDialogOpen = false;
+
+    // 대련 시작 대화 표시
+    const sparDialogue = npc.dialogues.spar || sparMonster.dialogues?.start || '덤벼라!';
+    addGameLog(`⚔️ ${npc.name}: "${sparDialogue}"`);
+
+    // 대련 전투 시작
+    setTimeout(() => {
+        startSparBattle(sparMonster, npc);
+    }, 500);
+}
+
+/**
+ * 대련 전투를 시작합니다.
+ * @param {Object} sparMonster - 대련 몬스터 데이터
+ * @param {Object} npc - NPC 데이터
+ */
+function startSparBattle(sparMonster, npc) {
+    // 전투용 몬스터 객체 생성
+    const monster = {
+        ...sparMonster,
+        name: npc.name,
+        currentHp: sparMonster.hp,
+        currentMp: sparMonster.mp,
+        cooldowns: {},  // 스킬 쿨타임 관리
+        traitState: {},  // 특성 상태 관리
+        isPhase2: false  // 2페이즈 상태 (상급교관용)
+    };
+
+    // 대련 시작 - battleSystem.js의 startBattle 함수 호출
+    if (typeof startBattle === 'function') {
+        // 대련용 플래그 설정
+        battleState.isSpar = true;
+        battleState.sparNpc = npc;
+        battleState.sparBackground = 'assets/backgrounds/spar_arena.png';  // 대련 배경
+        startBattle(monster);
+    } else {
+        console.error('startBattle 함수를 찾을 수 없습니다.');
+        addGameLog('❌ 전투 시스템 오류가 발생했습니다.');
+    }
+}
+
 
 // ============================================
 // 🛒 상점 UI 시스템
