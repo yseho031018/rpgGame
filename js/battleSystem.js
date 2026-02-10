@@ -1863,20 +1863,26 @@ function recalculatePlayerStats() {
         efficiencyPerAgi: 1 / 8, evasionPerAgi: 1 / 7, healEffPerVit: 1 / 3
     };
 
+    // 장비 보너스 스탯 포함한 총 스탯 계산
+    const totalStr = (player.str || 0) + (player.bonusStr || 0);
+    const totalVit = (player.vit || 0) + (player.bonusVit || 0);
+    const totalInt = (player.int || 0) + (player.bonusInt || 0);
+    const totalAgi = (player.agi || 0) + (player.bonusAgi || 0);
+
     // HP/MP 계산 (근력 3당 HP +1 추가)
-    player.maxHp = (player.baseHp || 30) + Math.round(player.vit * r.hpPerVit) + Math.round(player.str * (r.hpPerStr || 0)) + (player.bonusHp || 0);
-    player.maxMp = (player.baseMp || 15) + Math.round(player.int * r.mpPerInt) + (player.bonusMp || 0);
+    player.maxHp = (player.baseHp || 30) + Math.round(totalVit * r.hpPerVit) + Math.round(totalStr * (r.hpPerStr || 0)) + (player.bonusHp || 0);
+    player.maxMp = (player.baseMp || 15) + Math.round(totalInt * r.mpPerInt) + (player.bonusMp || 0);
 
     // 공격력/방어력 계산
-    player.pAtk = Math.round((player.basePAtk || 1) + player.str * r.pAtkPerStr);
-    player.mAtk = Math.round((player.baseMAtk || 1) + player.int * r.mAtkPerInt);
-    player.pDef = Math.round((player.basePDef || 0) + player.str * r.pDefPerStr + player.vit * r.pDefPerVit);
-    player.mDef = Math.round((player.baseMDef || 0) + player.int * r.mDefPerInt + player.vit * r.mDefPerVit);
+    player.pAtk = Math.round((player.basePAtk || 1) + totalStr * r.pAtkPerStr);
+    player.mAtk = Math.round((player.baseMAtk || 1) + totalInt * r.mAtkPerInt);
+    player.pDef = Math.round((player.basePDef || 0) + totalStr * r.pDefPerStr + totalVit * r.pDefPerVit);
+    player.mDef = Math.round((player.baseMDef || 0) + totalInt * r.mDefPerInt + totalVit * r.mDefPerVit);
 
     // 퍼센트 스탯
-    player.efficiency = Math.round(player.agi * r.efficiencyPerAgi);
-    player.evasion = Math.round(player.agi * r.evasionPerAgi);
-    player.healEff = Math.round(player.vit * r.healEffPerVit);
+    player.efficiency = Math.round(totalAgi * r.efficiencyPerAgi);
+    player.evasion = Math.round(totalAgi * r.evasionPerAgi);
+    player.healEff = Math.round(totalVit * r.healEffPerVit);
 }
 
 /**

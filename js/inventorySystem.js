@@ -424,6 +424,7 @@ function applyEquipmentStats() {
     let bonusPAtk = 0, bonusMAtk = 0;
     let bonusPDef = 0, bonusMDef = 0;
     let bonusHp = 0, bonusMp = 0;
+    let bonusStr = 0, bonusVit = 0, bonusInt = 0, bonusAgi = 0;
 
     // 장비 스탯 합산
     Object.values(equipment).forEach(item => {
@@ -434,6 +435,10 @@ function applyEquipmentStats() {
             if (item.stats.mDef) bonusMDef += item.stats.mDef;
             if (item.stats.hp) bonusHp += item.stats.hp;
             if (item.stats.mp) bonusMp += item.stats.mp;
+            if (item.stats.str) bonusStr += item.stats.str;
+            if (item.stats.vit) bonusVit += item.stats.vit;
+            if (item.stats.int) bonusInt += item.stats.int;
+            if (item.stats.agi) bonusAgi += item.stats.agi;
             // 호환성: 기존 atk/def도 지원
             if (item.stats.atk) bonusPAtk += item.stats.atk;
             if (item.stats.def) bonusPDef += item.stats.def;
@@ -447,6 +452,10 @@ function applyEquipmentStats() {
     player.bonusMDef = bonusMDef;
     player.bonusHp = bonusHp;
     player.bonusMp = bonusMp;
+    player.bonusStr = bonusStr;
+    player.bonusVit = bonusVit;
+    player.bonusInt = bonusInt;
+    player.bonusAgi = bonusAgi;
 
     // 파생 스탯 재계산 (보너스 HP/MP 포함)
     if (typeof recalculatePlayerStats === 'function') {
@@ -560,19 +569,19 @@ function renderCharacterInfo() {
         <div class="stat-divider"></div>
         <div class="stat-row sub-stat${(player.statPoints || 0) > 0 ? ' allocatable' : ''}">
             <span class="stat-label">💪 근력</span>
-            <span class="stat-value">${player.str || 0}${(player.statPoints || 0) > 0 ? `<button class="stat-add-btn" onclick="allocateStatPoint('str')">+</button>` : ''}</span>
+            <span class="stat-value">${player.str || 0}${(player.bonusStr || 0) > 0 ? ` <span class="bonus">+${player.bonusStr}</span>` : ''}${(player.statPoints || 0) > 0 ? `<button class="stat-add-btn" onclick="allocateStatPoint('str')">+</button>` : ''}</span>
         </div>
         <div class="stat-row sub-stat${(player.statPoints || 0) > 0 ? ' allocatable' : ''}">
             <span class="stat-label">🫀 체력</span>
-            <span class="stat-value">${player.vit || 0}${(player.statPoints || 0) > 0 ? `<button class="stat-add-btn" onclick="allocateStatPoint('vit')">+</button>` : ''}</span>
+            <span class="stat-value">${player.vit || 0}${(player.bonusVit || 0) > 0 ? ` <span class="bonus">+${player.bonusVit}</span>` : ''}${(player.statPoints || 0) > 0 ? `<button class="stat-add-btn" onclick="allocateStatPoint('vit')">+</button>` : ''}</span>
         </div>
         <div class="stat-row sub-stat${(player.statPoints || 0) > 0 ? ' allocatable' : ''}">
             <span class="stat-label">🧠 지능</span>
-            <span class="stat-value">${player.int || 0}${(player.statPoints || 0) > 0 ? `<button class="stat-add-btn" onclick="allocateStatPoint('int')">+</button>` : ''}</span>
+            <span class="stat-value">${player.int || 0}${(player.bonusInt || 0) > 0 ? ` <span class="bonus">+${player.bonusInt}</span>` : ''}${(player.statPoints || 0) > 0 ? `<button class="stat-add-btn" onclick="allocateStatPoint('int')">+</button>` : ''}</span>
         </div>
         <div class="stat-row sub-stat${(player.statPoints || 0) > 0 ? ' allocatable' : ''}">
             <span class="stat-label">💨 민첩</span>
-            <span class="stat-value">${player.agi || 0}${(player.statPoints || 0) > 0 ? `<button class="stat-add-btn" onclick="allocateStatPoint('agi')">+</button>` : ''}</span>
+            <span class="stat-value">${player.agi || 0}${(player.bonusAgi || 0) > 0 ? ` <span class="bonus">+${player.bonusAgi}</span>` : ''}${(player.statPoints || 0) > 0 ? `<button class="stat-add-btn" onclick="allocateStatPoint('agi')">+</button>` : ''}</span>
         </div>
         <div class="stat-divider"></div>
         <div class="stat-row sub-stat">
@@ -657,6 +666,10 @@ function renderEquipment() {
                 if (item.stats.def) statParts.push(`방어+${item.stats.def}`);
                 if (item.stats.hp) statParts.push(`HP+${item.stats.hp}`);
                 if (item.stats.mp) statParts.push(`MP+${item.stats.mp}`);
+                if (item.stats.str) statParts.push(`근력+${item.stats.str}`);
+                if (item.stats.vit) statParts.push(`체력+${item.stats.vit}`);
+                if (item.stats.int) statParts.push(`지능+${item.stats.int}`);
+                if (item.stats.agi) statParts.push(`민첩+${item.stats.agi}`);
                 statsStr = statParts.join(' ');
             }
 
@@ -706,8 +719,8 @@ function renderInventoryItems() {
 
             slot.innerHTML = `
                 <div class="item-content" style="border-color: ${RARITY_COLORS[item.rarity] || '#666'}" 
-                     onclick="showItemTooltip(${originalIndex}, event)"
-                     oncontextmenu="useItem(${originalIndex}); return false;">
+                     onclick="showItemContextMenu(${originalIndex}, event)"
+                     oncontextmenu="event.preventDefault(); showItemContextMenu(${originalIndex}, event);">
                     <span class="item-icon">${item.icon}</span>
                     ${item.stackable && item.quantity > 1 ? `<span class="item-quantity">${item.quantity}</span>` : ''}
                 </div>
@@ -755,6 +768,11 @@ function showItemTooltip(slotIndex, event) {
         if (item.stats.mAtk) statsHtml += `<div class="tooltip-stat">🔮 마법공격력 +${item.stats.mAtk}</div>`;
         if (item.stats.pDef) statsHtml += `<div class="tooltip-stat">🛡️ 물리방어력 +${item.stats.pDef}</div>`;
         if (item.stats.mDef) statsHtml += `<div class="tooltip-stat">🔰 마법방어력 +${item.stats.mDef}</div>`;
+        // 기본 스탯
+        if (item.stats.str) statsHtml += `<div class="tooltip-stat">💪 근력 +${item.stats.str}</div>`;
+        if (item.stats.vit) statsHtml += `<div class="tooltip-stat">🫀 체력 +${item.stats.vit}</div>`;
+        if (item.stats.int) statsHtml += `<div class="tooltip-stat">🧠 지능 +${item.stats.int}</div>`;
+        if (item.stats.agi) statsHtml += `<div class="tooltip-stat">💨 민첩 +${item.stats.agi}</div>`;
         // 기존 호환성
         if (item.stats.atk) statsHtml += `<div class="tooltip-stat">⚔️ 공격력 +${item.stats.atk}</div>`;
         if (item.stats.def) statsHtml += `<div class="tooltip-stat">🛡️ 방어력 +${item.stats.def}</div>`;
@@ -775,7 +793,6 @@ function showItemTooltip(slotIndex, event) {
         ${statsHtml}
         <div class="tooltip-desc">${item.description}</div>
         <div class="tooltip-price">💰 ${item.sellPrice}G</div>
-        <div class="tooltip-hint">우클릭: 사용/장착</div>
     `;
 
     // 위치 설정
@@ -798,6 +815,221 @@ function hideItemTooltip() {
     if (tooltip) {
         tooltip.classList.add('hidden');
     }
+}
+
+// ============================================
+// 📋 아이템 컨텍스트 메뉴 시스템
+// ============================================
+
+/**
+ * 아이템 컨텍스트 메뉴를 표시합니다.
+ */
+function showItemContextMenu(slotIndex, event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (slotIndex < 0 || slotIndex >= inventoryItems.length) return;
+
+    const item = inventoryItems[slotIndex];
+    
+    // 기존 컨텍스트 메뉴 제거
+    hideItemContextMenu();
+    hideItemTooltip();
+
+    const menu = document.createElement('div');
+    menu.id = 'itemContextMenu';
+    menu.className = 'item-context-menu';
+
+    // 아이템 타입에 따른 메뉴 옵션 구성
+    const equipableTypes = ['weapon', 'armor', 'helmet', 'boots', 'gloves', 'tool', 'necklace', 'ring', 'accessory'];
+    const isEquipable = equipableTypes.includes(item.type);
+    const isConsumable = item.type === 'consumable';
+
+    let menuOptions = '';
+
+    // 아이템 이름 헤더
+    menuOptions += `
+        <div class="context-menu-header" style="border-left-color: ${RARITY_COLORS[item.rarity] || '#666'}">
+            <span class="context-menu-icon">${item.icon}</span>
+            <span class="context-menu-name">${item.name}</span>
+        </div>
+    `;
+
+    // 장착 가능한 아이템
+    if (isEquipable) {
+        menuOptions += `
+            <button class="context-menu-btn equip-btn" onclick="contextMenuEquip(${slotIndex})">
+                <span class="context-btn-icon">⚔️</span>
+                <span class="context-btn-text">장착</span>
+            </button>
+        `;
+    }
+
+    // 소모품 사용
+    if (isConsumable) {
+        menuOptions += `
+            <button class="context-menu-btn use-btn" onclick="contextMenuUse(${slotIndex})">
+                <span class="context-btn-icon">🧪</span>
+                <span class="context-btn-text">사용</span>
+            </button>
+        `;
+    }
+
+    // 정보 보기 (모든 아이템)
+    menuOptions += `
+        <button class="context-menu-btn info-btn" onclick="contextMenuInfo(${slotIndex}, event)">
+            <span class="context-btn-icon">📋</span>
+            <span class="context-btn-text">정보 보기</span>
+        </button>
+    `;
+
+    // 버리기 (모든 아이템)
+    menuOptions += `
+        <button class="context-menu-btn discard-btn" onclick="contextMenuDiscard(${slotIndex})">
+            <span class="context-btn-icon">🗑️</span>
+            <span class="context-btn-text">버리기</span>
+        </button>
+    `;
+
+    menu.innerHTML = menuOptions;
+
+    // 위치 설정 - 클릭 위치 기준
+    document.body.appendChild(menu);
+
+    // 메뉴가 화면 밖으로 나가지 않도록 위치 조정
+    const menuRect = menu.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+
+    let posX = event.clientX;
+    let posY = event.clientY;
+
+    if (posX + menuRect.width > viewportWidth) {
+        posX = viewportWidth - menuRect.width - 10;
+    }
+    if (posY + menuRect.height > viewportHeight) {
+        posY = viewportHeight - menuRect.height - 10;
+    }
+
+    menu.style.left = `${posX}px`;
+    menu.style.top = `${posY}px`;
+
+    // 외부 클릭 시 메뉴 닫기
+    setTimeout(() => {
+        document.addEventListener('click', hideItemContextMenu, { once: true });
+    }, 0);
+}
+
+/**
+ * 컨텍스트 메뉴를 숨깁니다.
+ */
+function hideItemContextMenu() {
+    const menu = document.getElementById('itemContextMenu');
+    if (menu) {
+        menu.remove();
+    }
+}
+
+/**
+ * 컨텍스트 메뉴 - 장착
+ */
+function contextMenuEquip(slotIndex) {
+    hideItemContextMenu();
+    equipItem(slotIndex);
+}
+
+/**
+ * 컨텍스트 메뉴 - 사용
+ */
+function contextMenuUse(slotIndex) {
+    hideItemContextMenu();
+    useItem(slotIndex);
+}
+
+/**
+ * 컨텍스트 메뉴 - 정보 보기
+ */
+function contextMenuInfo(slotIndex, event) {
+    // 메뉴 위치를 저장해 둔 뒤 메뉴를 닫고 tooltip을 그 위치에 표시
+    const menu = document.getElementById('itemContextMenu');
+    const posX = menu ? parseInt(menu.style.left) : event.clientX;
+    const posY = menu ? parseInt(menu.style.top) : event.clientY;
+    hideItemContextMenu();
+    showItemTooltipAtPosition(slotIndex, posX, posY);
+}
+
+/**
+ * 컨텍스트 메뉴 - 버리기
+ */
+function contextMenuDiscard(slotIndex) {
+    hideItemContextMenu();
+    
+    if (slotIndex < 0 || slotIndex >= inventoryItems.length) return;
+
+    const item = inventoryItems[slotIndex];
+    
+    // 확인 다이얼로그
+    const confirmed = confirm(`정말 "${item.name}"${item.stackable && item.quantity > 1 ? ` x${item.quantity}` : ''}을(를) 버리시겠습니까?\n\n⚠️ 버린 아이템은 되돌릴 수 없습니다!`);
+    
+    if (confirmed) {
+        const itemName = item.name;
+        const quantity = item.quantity || 1;
+        removeItemFromInventory(slotIndex);
+        addGameLog(`🗑️ ${itemName}${quantity > 1 ? ` x${quantity}` : ''}을(를) 버렸습니다.`);
+        updatePlayerUI();
+        renderInventory();
+    }
+}
+
+/**
+ * 아이템 툴팁을 표시합니다. (정보 보기용)
+ */
+function showItemTooltipAtPosition(slotIndex, x, y) {
+    if (slotIndex < 0 || slotIndex >= inventoryItems.length) return;
+
+    const item = inventoryItems[slotIndex];
+    const tooltip = document.getElementById('itemTooltip');
+    if (!tooltip) return;
+
+    // showItemTooltip과 동일한 내용 표시
+    let statsHtml = '';
+    if (item.stats) {
+        if (item.stats.pAtk) statsHtml += `<div class="tooltip-stat">⚔️ 물리공격력 +${item.stats.pAtk}</div>`;
+        if (item.stats.mAtk) statsHtml += `<div class="tooltip-stat">🔮 마법공격력 +${item.stats.mAtk}</div>`;
+        if (item.stats.pDef) statsHtml += `<div class="tooltip-stat">🛡️ 물리방어력 +${item.stats.pDef}</div>`;
+        if (item.stats.mDef) statsHtml += `<div class="tooltip-stat">🔰 마법방어력 +${item.stats.mDef}</div>`;
+        if (item.stats.str) statsHtml += `<div class="tooltip-stat">💪 근력 +${item.stats.str}</div>`;
+        if (item.stats.vit) statsHtml += `<div class="tooltip-stat">🫀 체력 +${item.stats.vit}</div>`;
+        if (item.stats.int) statsHtml += `<div class="tooltip-stat">🧠 지능 +${item.stats.int}</div>`;
+        if (item.stats.agi) statsHtml += `<div class="tooltip-stat">💨 민첩 +${item.stats.agi}</div>`;
+        if (item.stats.atk) statsHtml += `<div class="tooltip-stat">⚔️ 공격력 +${item.stats.atk}</div>`;
+        if (item.stats.def) statsHtml += `<div class="tooltip-stat">🛡️ 방어력 +${item.stats.def}</div>`;
+        if (item.stats.hp) statsHtml += `<div class="tooltip-stat">❤️ HP +${item.stats.hp}</div>`;
+        if (item.stats.mp) statsHtml += `<div class="tooltip-stat">💙 MP +${item.stats.mp}</div>`;
+    }
+    if (item.effect) {
+        if (item.effect.hp) statsHtml += `<div class="tooltip-stat">❤️ HP 회복 +${item.effect.hp}</div>`;
+        if (item.effect.mp) statsHtml += `<div class="tooltip-stat">💙 MP 회복 +${item.effect.mp}</div>`;
+    }
+
+    tooltip.innerHTML = `
+        <div class="tooltip-header" style="border-left-color: ${RARITY_COLORS[item.rarity] || '#666'}">
+            <span class="tooltip-icon">${item.icon}</span>
+            <span class="tooltip-name">${item.name}</span>
+        </div>
+        <div class="tooltip-type">${ITEM_TYPES[item.type]?.name || item.type}</div>
+        ${statsHtml}
+        <div class="tooltip-desc">${item.description}</div>
+        <div class="tooltip-price">💰 ${item.sellPrice}G</div>
+    `;
+
+    tooltip.style.left = `${x + 10}px`;
+    tooltip.style.top = `${y}px`;
+    tooltip.classList.remove('hidden');
+
+    setTimeout(() => {
+        document.addEventListener('click', hideItemTooltip, { once: true });
+    }, 0);
 }
 
 // ============================================

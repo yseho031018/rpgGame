@@ -753,10 +753,25 @@ function showShopCategory(category) {
     if (category === 'weapons') {
         // 현재 플레이어 직업에 맞는 무기만 표시
         const playerJob = player ? player.job : 'warrior';
+        
+        // 구리 무기 (Tier 1)
+        if (SHOP_ITEMS.copperWeapons) {
+            const copperWeapon = SHOP_ITEMS.copperWeapons[playerJob];
+            if (copperWeapon) items.push(copperWeapon);
+        }
+        
+        // 평범한 무기 (Tier 2)
         const weapon = SHOP_ITEMS.weapons[playerJob];
         if (weapon) items.push(weapon);
 
         // 다른 직업 무기도 표시 (구매 불가 표시)
+        if (SHOP_ITEMS.copperWeapons) {
+            Object.entries(SHOP_ITEMS.copperWeapons).forEach(([job, w]) => {
+                if (job !== playerJob) {
+                    items.push({ ...w, otherJob: true });
+                }
+            });
+        }
         Object.entries(SHOP_ITEMS.weapons).forEach(([job, w]) => {
             if (job !== playerJob) {
                 items.push({ ...w, otherJob: true });
@@ -828,7 +843,15 @@ function formatItemStats(stats) {
         pAtk: '물리공격력',
         mAtk: '마법공격력',
         pDef: '물리방어력',
-        mDef: '마법방어력'
+        mDef: '마법방어력',
+        str: '근력',
+        vit: '체력',
+        int: '지능',
+        agi: '민첩',
+        hp: 'HP',
+        mp: 'MP',
+        atk: '공격력',
+        def: '방어력'
     };
 
     return Object.entries(stats)
@@ -884,10 +907,19 @@ function buyItem(itemId) {
     // 모든 상점 아이템에서 해당 아이템 찾기
     let item = null;
 
+    // 구리 무기에서 찾기
+    if (SHOP_ITEMS.copperWeapons) {
+        Object.values(SHOP_ITEMS.copperWeapons).forEach(w => {
+            if (w.id === itemId) item = w;
+        });
+    }
+
     // 무기에서 찾기
-    Object.values(SHOP_ITEMS.weapons).forEach(w => {
-        if (w.id === itemId) item = w;
-    });
+    if (!item) {
+        Object.values(SHOP_ITEMS.weapons).forEach(w => {
+            if (w.id === itemId) item = w;
+        });
+    }
 
     // 방어구에서 찾기
     if (!item) {
@@ -1013,6 +1045,15 @@ console.log('🛒 shopSystem.js 로드 완료!');
  * 이렇게 해야 addItemToInventory 함수가 아이템을 찾을 수 있습니다.
  */
 function registerShopItemsToDatabase() {
+    // 구리 무기 등록
+    if (SHOP_ITEMS.copperWeapons) {
+        Object.values(SHOP_ITEMS.copperWeapons).forEach(item => {
+            if (!ITEMS_DATABASE[item.id]) {
+                ITEMS_DATABASE[item.id] = item;
+            }
+        });
+    }
+
     // 무기 등록
     Object.values(SHOP_ITEMS.weapons).forEach(item => {
         if (!ITEMS_DATABASE[item.id]) {
