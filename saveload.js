@@ -7,6 +7,10 @@
  * 1. HTML에서 로드: <script src="saveload.js"></script>
  * 2. 저장: saveGame() 또는 showSaveLoadMenu()
  * 3. 불러오기: loadGame() 또는 showSaveLoadMenu()
+ * 
+ * v2.0 - MariaDB 서버 저장 지원
+ * - 로그인 시: 서버에 저장 (계정별 저장)
+ * - 비로그인 시: localStorage에 저장 (기존 방식)
  */
 
 // ============================================
@@ -17,15 +21,351 @@ const SAVE_CONFIG = {
     // localStorage 키 이름
     saveKey: 'rpg_save_data',
 
-    // 최대 세이브 슬롯 수
+    // 최대 세이브 슬롯 수 (비로그인 시)
     maxSlots: 3,
 
     // 자동 저장 사용 여부
     autoSaveEnabled: true,
 
     // 자동 저장 간격 (밀리초) - 5분
-    autoSaveInterval: 300000
+    autoSaveInterval: 300000,
+    
+    // API 서버 URL
+    apiBaseUrl: 'http://localhost:3001/api'
 };
+
+// ============================================
+// 🌐 서버 저장/불러오기 (MariaDB)
+// ============================================
+
+/**
+ * 현재 게임 데이터를 수집합니다.
+ * @returns {Object} 저장용 게임 데이터
+ */
+function collectSaveData() {
+    if (typeof player === 'undefined' || player === null) {
+        return null;
+    }
+    
+    return {
+        // 메타 정보
+        savedAt: new Date().toISOString(),
+        playTime: getPlayTime(),
+        version: '2.0',
+
+        // 플레이어 전체 데이터 (깊은 복사)
+        player: JSON.parse(JSON.stringify(player)),
+
+        // 골드
+        gold: typeof gold !== 'undefined' ? gold : 0,
+
+        // 인벤토리 아이템
+        inventoryItems: typeof inventoryItems !== 'undefined' ? JSON.parse(JSON.stringify(inventoryItems)) : [],
+
+        // 장비
+        equipment: typeof equipment !== 'undefined' ? JSON.parse(JSON.stringify(equipment)) : {},
+
+        // 맵 시스템 상태
+        mapState: {
+            currentMap: typeof currentMapId !== 'undefined' ? currentMapId : null,
+            currentLocation: typeof currentLocationId !== 'undefined' ? currentLocationId : null,
+            explorationProgress: typeof explorationProgress !== 'undefined' ? JSON.parse(JSON.stringify(explorationProgress)) : {},
+            unlockedLocations: typeof unlockedLocations !== 'undefined' ? JSON.parse(JSON.stringify(unlockedLocations)) : {}
+        },
+
+        // 시간 시스템 상태
+        timeState: (function() {
+            if (typeof getGameTime === 'function') {
+                const gt = getGameTime();
+                return {
+                    currentDay: gt.dayCount || 1,
+                    currentHour: gt.hour || 8,
+                    currentMinute: gt.minute || 0,
+                    totalMinutes: gt.totalMinutes || 0
+                };
+            }
+            return { currentDay: 1, currentHour: 8, currentMinute: 0, totalMinutes: 0 };
+        })(),
+
+        // 허기/갈증 시스템 상태  
+        hungerState: {
+            hunger: player.hunger !== undefined ? player.hunger : 100,
+            thirst: player.thirst !== undefined ? player.thirst : 100,
+            maxHunger: player.maxHunger !== undefined ? player.maxHunger : 100,
+            maxThirst: player.maxThirst !== undefined ? player.maxThirst : 100
+        },
+
+        // 게임 진행 상태
+        progress: {
+            currentStage: typeof currentStage !== 'undefined' ? currentStage : 1,
+            defeatedBosses: typeof defeatedBosses !== 'undefined' ? JSON.parse(JSON.stringify(defeatedBosses)) : [],
+            unlockedAreas: typeof unlockedAreas !== 'undefined' ? JSON.parse(JSON.stringify(unlockedAreas)) : ['훈련장'],
+            completedQuests: typeof completedQuests !== 'undefined' ? JSON.parse(JSON.stringify(completedQuests)) : []
+        },
+
+        // 설정
+        settings: {
+            bgmVolume: typeof bgmVolume !== 'undefined' ? bgmVolume : 100,
+            sfxVolume: typeof sfxVolume !== 'undefined' ? sfxVolume : 100
+        }
+    };
+}
+
+/**
+ * 서버에 게임을 저장합니다. (로그인 필요)
+ * @returns {Promise<boolean>} 저장 성공 여부
+ */
+async function saveGameToServer() {
+    try {
+        // 로그인 확인
+        if (typeof isLoggedIn !== 'function' || !isLoggedIn()) {
+            console.log('⚠️ 로그인되지 않음 - localStorage에 저장');
+            return saveGame(1, true); // 서버 저장 건너뛰기
+        }
+        
+        const saveData = collectSaveData();
+        if (!saveData) {
+            console.error('❌ 저장할 플레이어 데이터가 없습니다.');
+            return false;
+        }
+        
+        const response = await fetch(`${SAVE_CONFIG.apiBaseUrl}/save`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${getAuthToken()}`
+            },
+            body: JSON.stringify({
+                saveData: saveData,
+                playTimeSeconds: saveData.playTime.totalSeconds,
+                playerName: saveData.player.name || '용사',
+                playerLevel: saveData.player.level || 1
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+            console.log('✅ 서버에 저장 완료!', result.savedAt);
+            return true;
+        } else {
+            console.error('❌ 서버 저장 실패:', result.error);
+            // 서버 저장 실패 시 localStorage에 백업
+            saveGame(1, true); // 서버 저장 건너뛰기
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ 서버 연결 실패:', error);
+        // 오프라인 시 localStorage에 저장
+        console.log('⚠️ 오프라인 모드 - localStorage에 저장');
+        return saveGame(1, true); // 서버 저장 건너뛰기
+    }
+}
+
+/**
+ * 서버에서 게임을 불러옵니다. (로그인 필요)
+ * @returns {Promise<boolean>} 불러오기 성공 여부
+ */
+async function loadGameFromServer() {
+    try {
+        // 로그인 확인
+        if (typeof isLoggedIn !== 'function' || !isLoggedIn()) {
+            console.log('⚠️ 로그인되지 않음 - localStorage에서 불러오기');
+            return loadGame(1);
+        }
+        
+        const response = await fetch(`${SAVE_CONFIG.apiBaseUrl}/save`, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success && result.hasSave) {
+            // 저장 데이터 적용
+            applySaveData(result.saveData);
+            console.log('✅ 서버에서 불러오기 완료!');
+            showToast('✅ 서버에서 불러오기 완료!', 'success');
+            return true;
+        } else if (result.success && !result.hasSave) {
+            console.log('ℹ️ 서버에 저장된 게임이 없습니다.');
+            showToast('ℹ️ 저장된 게임이 없습니다.', 'info');
+            return false;
+        } else {
+            console.error('❌ 서버 불러오기 실패:', result.error);
+            return false;
+        }
+    } catch (error) {
+        console.error('❌ 서버 연결 실패:', error);
+        // 오프라인 시 localStorage에서 불러오기
+        console.log('⚠️ 오프라인 모드 - localStorage에서 불러오기');
+        return loadGame(1);
+    }
+}
+
+/**
+ * 저장 데이터를 게임에 적용합니다.
+ * @param {Object} saveData - 저장 데이터
+ */
+function applySaveData(saveData) {
+    // 플레이어 데이터 복원
+    if (saveData.player) {
+        player = JSON.parse(JSON.stringify(saveData.player));
+        
+        // 직업 데이터(jobData) 복원
+        if (player.job && typeof JOBS !== 'undefined' && JOBS[player.job]) {
+            player.jobData = JOBS[player.job];
+        }
+    }
+
+    // 골드 복원
+    if (typeof saveData.gold !== 'undefined') {
+        gold = saveData.gold;
+    }
+
+    // 인벤토리 복원
+    if (saveData.inventoryItems) {
+        inventoryItems = JSON.parse(JSON.stringify(saveData.inventoryItems));
+    } else {
+        inventoryItems = [];
+    }
+
+    // 장비 복원
+    if (saveData.equipment) {
+        equipment = JSON.parse(JSON.stringify(saveData.equipment));
+    }
+    
+    // 장비 스탯 재계산
+    if (typeof applyEquipmentStats === 'function' && player && equipment) {
+        try {
+            applyEquipmentStats();
+        } catch (e) {
+            console.warn('⚠️ 장비 스탯 계산 실패:', e);
+        }
+    }
+
+    // 맵 시스템 상태 복원
+    if (saveData.mapState) {
+        if (saveData.mapState.currentMap !== undefined && typeof currentMapId !== 'undefined') {
+            currentMapId = saveData.mapState.currentMap;
+        }
+        if (saveData.mapState.currentLocation !== undefined && typeof currentLocationId !== 'undefined') {
+            currentLocationId = saveData.mapState.currentLocation;
+        }
+        if (saveData.mapState.explorationProgress && typeof explorationProgress !== 'undefined') {
+            explorationProgress = JSON.parse(JSON.stringify(saveData.mapState.explorationProgress));
+        }
+        if (saveData.mapState.unlockedLocations && typeof unlockedLocations !== 'undefined') {
+            unlockedLocations = JSON.parse(JSON.stringify(saveData.mapState.unlockedLocations));
+        }
+    }
+
+    // 시간 시스템 상태 복원
+    if (saveData.timeState) {
+        // 시간 시스템은 gameTimeOrigin/gameStartHour 기반으로 동작하므로 역산 복원
+        if (typeof gameTimeOrigin !== 'undefined' && typeof gameStartHour !== 'undefined') {
+            const savedHour = saveData.timeState.currentHour || 8;
+            const savedMinute = saveData.timeState.currentMinute || 0;
+            const savedDay = saveData.timeState.currentDay || 1;
+            
+            gameStartHour = 0;
+            const totalGameMinutes = ((savedDay - 1) * 1440) + (savedHour * 60) + savedMinute;
+            const gameMinutesPerRealMs = 1440 / (typeof TIME_CONFIG !== 'undefined' ? TIME_CONFIG.gameDayDuration : 720000);
+            const realMsElapsed = totalGameMinutes / gameMinutesPerRealMs;
+            gameTimeOrigin = Date.now() - realMsElapsed;
+        }
+    }
+
+    // 허기/갈증 상태 복원
+    if (saveData.hungerState && player) {
+        player.hunger = saveData.hungerState.hunger;
+        player.thirst = saveData.hungerState.thirst;
+        player.maxHunger = saveData.hungerState.maxHunger;
+        player.maxThirst = saveData.hungerState.maxThirst;
+    }
+
+    // 게임 진행 상태 복원
+    if (saveData.progress) {
+        if (saveData.progress.currentStage !== undefined) {
+            if (typeof currentStage !== 'undefined') currentStage = saveData.progress.currentStage;
+            else window.currentStage = saveData.progress.currentStage;
+        }
+        if (saveData.progress.defeatedBosses) {
+            if (typeof defeatedBosses !== 'undefined') defeatedBosses = JSON.parse(JSON.stringify(saveData.progress.defeatedBosses));
+            else window.defeatedBosses = JSON.parse(JSON.stringify(saveData.progress.defeatedBosses));
+        }
+        if (saveData.progress.unlockedAreas) {
+            if (typeof unlockedAreas !== 'undefined') unlockedAreas = JSON.parse(JSON.stringify(saveData.progress.unlockedAreas));
+            else window.unlockedAreas = JSON.parse(JSON.stringify(saveData.progress.unlockedAreas));
+        }
+        if (saveData.progress.completedQuests) {
+            if (typeof completedQuests !== 'undefined') completedQuests = JSON.parse(JSON.stringify(saveData.progress.completedQuests));
+            else window.completedQuests = JSON.parse(JSON.stringify(saveData.progress.completedQuests));
+        }
+    }
+
+    // 플레이 시간 복원
+    if (saveData.playTime) {
+        const savedPlayTimeMs = saveData.playTime.totalSeconds * 1000;
+        startTime = Date.now() - savedPlayTimeMs;
+        gameStartTime = Date.now() - savedPlayTimeMs;
+    }
+
+    // 불러오기 플래그 설정
+    window.isLoadingGame = true;
+
+    // 게임 화면으로 전환
+    if (typeof showScreen === 'function') {
+        showScreen('game');
+    }
+    
+    // UI 갱신
+    setTimeout(() => {
+        if (typeof updateStatusBars === 'function') updateStatusBars();
+        if (typeof updateHungerUI === 'function') updateHungerUI();
+        if (typeof updateTimeUI === 'function') updateTimeUI();
+        if (typeof updateInventoryUI === 'function') updateInventoryUI();
+        if (typeof updateEquipmentUI === 'function') updateEquipmentUI();
+        if (typeof updatePlayerUI === 'function') updatePlayerUI();
+        // 맵 UI 갱신 (저장된 맵/위치로 배경+행동버튼 복원)
+        if (typeof updateMapUI === 'function') updateMapUI();
+        if (typeof updateLocationUI === 'function') updateLocationUI();
+    }, 100);
+}
+
+/**
+ * 서버에 저장된 게임 정보를 확인합니다.
+ * @returns {Promise<Object|null>} 저장 정보 또는 null
+ */
+async function checkServerSave() {
+    try {
+        if (typeof isLoggedIn !== 'function' || !isLoggedIn()) {
+            return null;
+        }
+        
+        const response = await fetch(`${SAVE_CONFIG.apiBaseUrl}/save/info`, {
+            headers: {
+                'Authorization': `Bearer ${getAuthToken()}`
+            }
+        });
+        
+        const result = await response.json();
+        
+        if (result.success && result.hasSave) {
+            return {
+                playerName: result.playerName,
+                playerLevel: result.playerLevel,
+                playTimeSeconds: result.playTimeSeconds,
+                savedAt: result.savedAt
+            };
+        }
+        return null;
+    } catch (error) {
+        console.error('❌ 서버 저장 확인 실패:', error);
+        return null;
+    }
+}
 
 // ============================================
 // 💾 핵심 저장/불러오기 함수
@@ -34,9 +374,10 @@ const SAVE_CONFIG = {
 /**
  * 게임 데이터를 저장합니다.
  * @param {number} slotNumber - 슬롯 번호 (1, 2, 3)
+ * @param {boolean} skipServerSave - 서버 저장 건너뛰기 여부 (무한 루프 방지)
  * @returns {boolean} 저장 성공 여부
  */
-function saveGame(slotNumber = 1) {
+function saveGame(slotNumber = 1, skipServerSave = false) {
     try {
         // player가 없으면 저장 불가
         if (typeof player === 'undefined' || player === null) {
@@ -58,24 +399,33 @@ function saveGame(slotNumber = 1) {
             // 골드
             gold: typeof gold !== 'undefined' ? gold : 0,
 
-            // 인벤토리 (깊은 복사)
-            inventory: typeof inventory !== 'undefined' ? JSON.parse(JSON.stringify(inventory)) : [],
+            // 인벤토리 아이템 (깊은 복사) - inventoryItems 사용
+            inventoryItems: typeof inventoryItems !== 'undefined' ? JSON.parse(JSON.stringify(inventoryItems)) : [],
+
+            // 장비 (깊은 복사) - equipment 사용
+            equipment: typeof equipment !== 'undefined' ? JSON.parse(JSON.stringify(equipment)) : {},
 
             // 맵 시스템 상태
             mapState: {
-                currentMap: typeof currentMap !== 'undefined' ? currentMap : null,
-                currentLocation: typeof currentLocation !== 'undefined' ? currentLocation : null,
+                currentMap: typeof currentMapId !== 'undefined' ? currentMapId : null,
+                currentLocation: typeof currentLocationId !== 'undefined' ? currentLocationId : null,
                 explorationProgress: typeof explorationProgress !== 'undefined' ? JSON.parse(JSON.stringify(explorationProgress)) : {},
                 unlockedLocations: typeof unlockedLocations !== 'undefined' ? JSON.parse(JSON.stringify(unlockedLocations)) : {}
             },
 
             // 시간 시스템 상태
-            timeState: {
-                currentDay: typeof currentDay !== 'undefined' ? currentDay : 1,
-                currentHour: typeof currentHour !== 'undefined' ? currentHour : 8,
-                currentMinute: typeof currentMinute !== 'undefined' ? currentMinute : 0,
-                totalMinutes: typeof totalMinutes !== 'undefined' ? totalMinutes : 0
-            },
+            timeState: (function() {
+            if (typeof getGameTime === 'function') {
+                const gt = getGameTime();
+                return {
+                    currentDay: gt.dayCount || 1,
+                    currentHour: gt.hour || 8,
+                    currentMinute: gt.minute || 0,
+                    totalMinutes: gt.totalMinutes || 0
+                };
+            }
+            return { currentDay: 1, currentHour: 8, currentMinute: 0, totalMinutes: 0 };
+        })(),
 
             // 허기/갈증 시스템 상태  
             hungerState: {
@@ -110,6 +460,15 @@ function saveGame(slotNumber = 1) {
         localStorage.setItem(SAVE_CONFIG.saveKey, JSON.stringify(allSaves));
 
         console.log(`✅ 슬롯 ${slotNumber}에 저장 완료!`, saveData);
+        
+        // 서버 저장 연동 (로그인 시 & skipServerSave가 아닐 때)
+        if (!skipServerSave && typeof isLoggedIn === 'function' && isLoggedIn()) {
+            // 비동기로 서버 저장 시도 (결과 기다리지 않음)
+            saveGameToServer().then(success => {
+                if (success) showToast('☁️ 서버에 클라우드 저장 완료', 'success');
+            }).catch(e => console.error('서버 저장 실패:', e));
+        }
+
         return true;
 
     } catch (error) {
@@ -138,74 +497,129 @@ function loadGame(slotNumber = 1) {
         // 플레이어 데이터 복원 (전체 객체)
         if (saveData.player) {
             // player 전역 변수에 저장된 데이터 복사
-            window.player = JSON.parse(JSON.stringify(saveData.player));
+            player = JSON.parse(JSON.stringify(saveData.player));
+            
+            // 직업 데이터(jobData) 복원 - JOBS 상수에서 조회
+            if (player.job && typeof JOBS !== 'undefined' && JOBS[player.job]) {
+                player.jobData = JOBS[player.job];
+                console.log(`📋 직업 데이터 복원: ${player.jobData.name}`);
+            }
         }
 
         // 골드 복원
         if (typeof saveData.gold !== 'undefined') {
-            window.gold = saveData.gold;
+            gold = saveData.gold;
         } else if (saveData.progress && typeof saveData.progress.gold !== 'undefined') {
-            window.gold = saveData.progress.gold;
+            gold = saveData.progress.gold;
         }
 
-        // 인벤토리 복원
-        if (saveData.inventory) {
-            window.inventory = JSON.parse(JSON.stringify(saveData.inventory));
+        // 인벤토리 아이템 복원 (inventoryItems 전역 변수)
+        if (saveData.inventoryItems) {
+            inventoryItems = JSON.parse(JSON.stringify(saveData.inventoryItems));
+            console.log(`📦 인벤토리 복원: ${inventoryItems.length}개 아이템`);
+        } else if (saveData.inventory) {
+            // 이전 버전 호환성 (inventory -> inventoryItems)
+            inventoryItems = JSON.parse(JSON.stringify(saveData.inventory));
+            console.log(`📦 인벤토리 복원 (구버전): ${inventoryItems.length}개 아이템`);
+        } else {
+            // 인벤토리 데이터가 없으면 빈 배열로 초기화
+            inventoryItems = [];
+            console.log('📦 인벤토리 초기화 (데이터 없음)');
+        }
+
+        // 장비 복원 (equipment 전역 변수)
+        if (saveData.equipment) {
+            equipment = JSON.parse(JSON.stringify(saveData.equipment));
+            console.log('⚔️ 장비 데이터 복원 완료');
+        } else {
+            // equipment가 없으면 기본값으로 초기화
+            equipment = {
+                helmet: null,
+                armor: null,
+                gloves: null,
+                boots: null,
+                weapon: null,
+                accessory: null
+            };
+            console.log('⚔️ 장비 데이터 초기화');
+        }
+        
+        // 장비 스탯 재계산 (장비가 있는 경우 스탯 적용)
+        try {
+            if (typeof applyEquipmentStats === 'function' && player && equipment) {
+                applyEquipmentStats();
+                console.log('📊 장비 스탯 재계산 완료');
+            }
+        } catch (equipError) {
+            console.warn('⚠️ 장비 스탯 계산 실패:', equipError);
         }
 
         // 맵 시스템 상태 복원
         if (saveData.mapState) {
-            if (typeof saveData.mapState.currentMap !== 'undefined') {
-                window.currentMap = saveData.mapState.currentMap;
+            if (typeof currentMapId !== 'undefined') {
+                currentMapId = saveData.mapState.currentMap || 'training';
             }
-            if (typeof saveData.mapState.currentLocation !== 'undefined') {
-                window.currentLocation = saveData.mapState.currentLocation;
+            if (typeof currentLocationId !== 'undefined') {
+                currentLocationId = saveData.mapState.currentLocation || 'entrance';
             }
-            if (saveData.mapState.explorationProgress) {
-                window.explorationProgress = JSON.parse(JSON.stringify(saveData.mapState.explorationProgress));
+            if (saveData.mapState.explorationProgress && typeof explorationProgress !== 'undefined') {
+                explorationProgress = JSON.parse(JSON.stringify(saveData.mapState.explorationProgress));
             }
-            if (saveData.mapState.unlockedLocations) {
-                window.unlockedLocations = JSON.parse(JSON.stringify(saveData.mapState.unlockedLocations));
+            if (saveData.mapState.unlockedLocations && typeof unlockedLocations !== 'undefined') {
+                unlockedLocations = JSON.parse(JSON.stringify(saveData.mapState.unlockedLocations));
             }
+        } else {
+            // mapState가 없는 이전 저장 데이터 호환성
+            if (typeof currentMapId !== 'undefined') currentMapId = 'training';
+            if (typeof currentLocationId !== 'undefined') currentLocationId = 'entrance';
         }
+        console.log(`🗺️ 맵 상태 복원: ${currentMapId} / ${currentLocationId}`);
 
         // 시간 시스템 상태 복원
         if (saveData.timeState) {
-            if (typeof saveData.timeState.currentDay !== 'undefined') {
-                window.currentDay = saveData.timeState.currentDay;
-            }
-            if (typeof saveData.timeState.currentHour !== 'undefined') {
-                window.currentHour = saveData.timeState.currentHour;
-            }
-            if (typeof saveData.timeState.currentMinute !== 'undefined') {
-                window.currentMinute = saveData.timeState.currentMinute;
-            }
-            if (typeof saveData.timeState.totalMinutes !== 'undefined') {
-                window.totalMinutes = saveData.timeState.totalMinutes;
+            // 시간 시스템은 gameTimeOrigin/gameStartHour 기반으로 동작하므로 역산 복원
+            if (typeof gameTimeOrigin !== 'undefined' && typeof gameStartHour !== 'undefined') {
+                const savedHour = saveData.timeState.currentHour || 8;
+                const savedMinute = saveData.timeState.currentMinute || 0;
+                const savedDay = saveData.timeState.currentDay || 1;
+                
+                // gameStartHour를 0으로 설정하고, 전체 경과 시간을 역산
+                gameStartHour = 0;
+                const totalGameMinutes = ((savedDay - 1) * 1440) + (savedHour * 60) + savedMinute;
+                const gameDayDuration = typeof TIME_CONFIG !== 'undefined' ? TIME_CONFIG.gameDayDuration : 720000;
+                const gameMinutesPerRealMs = 1440 / gameDayDuration;
+                const realMsElapsed = totalGameMinutes / gameMinutesPerRealMs;
+                gameTimeOrigin = Date.now() - realMsElapsed;
+                
+                console.log(`⏰ 시간 복원: Day ${savedDay} ${savedHour}:${String(savedMinute).padStart(2, '0')}`);
             }
         }
 
         // 허기/갈증 상태 복원 (player 객체에도 있지만 별도 저장된 경우 대비)
-        if (saveData.hungerState && window.player) {
-            window.player.hunger = saveData.hungerState.hunger;
-            window.player.thirst = saveData.hungerState.thirst;
-            window.player.maxHunger = saveData.hungerState.maxHunger;
-            window.player.maxThirst = saveData.hungerState.maxThirst;
+        if (saveData.hungerState && player) {
+            player.hunger = saveData.hungerState.hunger;
+            player.thirst = saveData.hungerState.thirst;
+            player.maxHunger = saveData.hungerState.maxHunger;
+            player.maxThirst = saveData.hungerState.maxThirst;
         }
 
         // 게임 진행 상태 복원
         if (saveData.progress) {
             if (typeof saveData.progress.currentStage !== 'undefined') {
-                window.currentStage = saveData.progress.currentStage;
+                if (typeof currentStage !== 'undefined') currentStage = saveData.progress.currentStage;
+                else window.currentStage = saveData.progress.currentStage;
             }
             if (saveData.progress.defeatedBosses) {
-                window.defeatedBosses = JSON.parse(JSON.stringify(saveData.progress.defeatedBosses));
+                if (typeof defeatedBosses !== 'undefined') defeatedBosses = JSON.parse(JSON.stringify(saveData.progress.defeatedBosses));
+                else window.defeatedBosses = JSON.parse(JSON.stringify(saveData.progress.defeatedBosses));
             }
             if (saveData.progress.unlockedAreas) {
-                window.unlockedAreas = JSON.parse(JSON.stringify(saveData.progress.unlockedAreas));
+                if (typeof unlockedAreas !== 'undefined') unlockedAreas = JSON.parse(JSON.stringify(saveData.progress.unlockedAreas));
+                else window.unlockedAreas = JSON.parse(JSON.stringify(saveData.progress.unlockedAreas));
             }
             if (saveData.progress.completedQuests) {
-                window.completedQuests = JSON.parse(JSON.stringify(saveData.progress.completedQuests));
+                if (typeof completedQuests !== 'undefined') completedQuests = JSON.parse(JSON.stringify(saveData.progress.completedQuests));
+                else window.completedQuests = JSON.parse(JSON.stringify(saveData.progress.completedQuests));
             }
         }
 
@@ -213,45 +627,55 @@ function loadGame(slotNumber = 1) {
         if (saveData.playTime) {
             const savedPlayTimeMs = saveData.playTime.totalSeconds * 1000;
             startTime = Date.now() - savedPlayTimeMs;
-            
-            // main.js의 gameStartTime도 복원
-            if (typeof window.gameStartTime !== 'undefined') {
-                window.gameStartTime = Date.now() - savedPlayTimeMs;
-            }
+            gameStartTime = Date.now() - savedPlayTimeMs;
         }
 
-        // UI 갱신 함수들 호출 (존재하는 경우)
-        if (typeof updateStatusBars === 'function') {
-            updateStatusBars();
-        }
-        if (typeof updateHungerUI === 'function') {
-            updateHungerUI();
-        }
-        if (typeof updateTimeUI === 'function') {
-            updateTimeUI();
-        }
-        if (typeof updateInventoryUI === 'function') {
-            updateInventoryUI();
-        }
-        if (typeof updateEquipmentUI === 'function') {
-            updateEquipmentUI();
-        }
-        
+        // 불러오기 플래그 설정 (initGameScreen에서 초기화 건너뛰기 위함)
+        window.isLoadingGame = true;
+
         // 게임 화면으로 전환
         if (typeof showScreen === 'function') {
             showScreen('game');
         }
         
-        // 맵 UI 갱신
-        if (typeof renderMapUI === 'function' && window.currentMap) {
-            renderMapUI();
-        }
+        // UI 갱신 함수들 호출 (화면 전환 후)
+        setTimeout(() => {
+            if (typeof updateStatusBars === 'function') {
+                updateStatusBars();
+            }
+            if (typeof updateHungerUI === 'function') {
+                updateHungerUI();
+            }
+            if (typeof updateTimeUI === 'function') {
+                updateTimeUI();
+            }
+            if (typeof updateInventoryUI === 'function') {
+                updateInventoryUI();
+            }
+            if (typeof updateEquipmentUI === 'function') {
+                updateEquipmentUI();
+            }
+            if (typeof updatePlayerUI === 'function') {
+                updatePlayerUI();
+            }
+            // 맵 UI 갱신 (저장된 맵/위치로 배경+행동버튼 복원)
+            if (typeof updateMapUI === 'function') {
+                updateMapUI();
+                console.log(`🗺️ 맵 UI 복원: ${currentMapId}`);
+            }
+            if (typeof updateLocationUI === 'function') {
+                updateLocationUI();
+                console.log(`📍 위치 UI 복원: ${currentLocationId}`);
+            }
+        }, 100);
 
         console.log(`✅ 슬롯 ${slotNumber} 불러오기 완료!`);
+        showToast(`✅ 슬롯 ${slotNumber} 불러오기 완료!`, 'success');
         return true;
 
     } catch (error) {
         console.error('❌ 불러오기 실패:', error);
+        showToast(`❌ 불러오기 실패: ${error.message}`, 'error');
         return false;
     }
 }
@@ -320,7 +744,7 @@ function hasSaveData(slotNumber = null) {
 
 /**
  * 세이브 데이터를 JSON 파일로 내보냅니다.
- * @param {number|null} slotNumber - 특정 슬롯만 내보내려면 번호 지정, null이면 모든 슬롯
+ * @param {number|null} slotNumber - 특정 슬롯만 내보내려면 번호 지정, null이면 현재 게임 데이터
  */
 function exportSaveToFile(slotNumber = null) {
     try {
@@ -341,13 +765,67 @@ function exportSaveToFile(slotNumber = null) {
             dataToExport = { [`slot${slotNumber}`]: saveData };
             fileName = `rpg_save_slot${slotNumber}_${dateStr}_${timeStr}.json`;
         } else {
-            // 모든 슬롯 내보내기
-            dataToExport = getAllSaveData();
-            if (Object.keys(dataToExport).length === 0) {
+            // 현재 게임 데이터 직접 내보내기
+            if (typeof player === 'undefined' || !player) {
                 showToast('❌ 저장된 데이터가 없습니다.', 'error');
                 return false;
             }
-            fileName = `rpg_save_all_${dateStr}_${timeStr}.json`;
+            
+            // 현재 세션 데이터 수집
+            const currentSessionData = {
+                savedAt: now.toISOString(),
+                
+                // 플레이어 데이터 전체
+                player: JSON.parse(JSON.stringify(player)),
+                
+                // 골드 (전역 변수)
+                gold: typeof gold !== 'undefined' ? gold : 0,
+                
+                // 인벤토리 아이템 (inventoryItems 사용)
+                inventoryItems: typeof inventoryItems !== 'undefined' ? JSON.parse(JSON.stringify(inventoryItems)) : [],
+                
+                // 장비 데이터 (equipment 사용)
+                equipment: typeof equipment !== 'undefined' ? JSON.parse(JSON.stringify(equipment)) : {},
+                
+                // 플레이 시간
+                playTime: getPlayTime(),
+                
+                // 맵 시스템 상태
+                mapState: {
+                    currentMap: typeof currentMap !== 'undefined' ? currentMap : 'training_grounds',
+                    currentLocation: typeof currentLocation !== 'undefined' ? currentLocation : 'entrance',
+                    explorationProgress: typeof explorationProgress !== 'undefined' ? JSON.parse(JSON.stringify(explorationProgress)) : {},
+                    unlockedLocations: typeof unlockedLocations !== 'undefined' ? JSON.parse(JSON.stringify(unlockedLocations)) : []
+                },
+                
+                // 시간 시스템 상태
+                timeState: {
+                    currentDay: typeof currentDay !== 'undefined' ? currentDay : 1,
+                    currentHour: typeof currentHour !== 'undefined' ? currentHour : 8,
+                    currentMinute: typeof currentMinute !== 'undefined' ? currentMinute : 0,
+                    totalMinutes: typeof totalMinutes !== 'undefined' ? totalMinutes : 0
+                },
+                
+                // 허기/갈증 시스템 상태  
+                hungerState: {
+                    hunger: player.hunger !== undefined ? player.hunger : 100,
+                    thirst: player.thirst !== undefined ? player.thirst : 100,
+                    maxHunger: player.maxHunger !== undefined ? player.maxHunger : 100,
+                    maxThirst: player.maxThirst !== undefined ? player.maxThirst : 100
+                },
+                
+                // 게임 진행 상태
+                progress: {
+                    currentStage: typeof currentStage !== 'undefined' ? currentStage : 1,
+                    defeatedBosses: typeof defeatedBosses !== 'undefined' ? JSON.parse(JSON.stringify(defeatedBosses)) : [],
+                    unlockedAreas: typeof unlockedAreas !== 'undefined' ? JSON.parse(JSON.stringify(unlockedAreas)) : ['훈련장'],
+                    completedQuests: typeof completedQuests !== 'undefined' ? JSON.parse(JSON.stringify(completedQuests)) : [],
+                    gold: typeof gold !== 'undefined' ? gold : 0
+                }
+            };
+            
+            dataToExport = { slot1: currentSessionData };
+            fileName = `rpg_save_${player.name || 'player'}_${dateStr}_${timeStr}.json`;
         }
         
         // 메타 정보 추가
@@ -865,7 +1343,7 @@ function showSaveLoadMenu(mode = 'save') {
                             <span>📅 ${savedDate}</span>
                             <span>⏱️ ${saveData.playTime?.formatted || '00:00:00'}</span>
                             <span>🏰 Stage ${saveData.progress?.currentStage || 1}</span>
-                            <span>💰 ${saveData.progress?.gold || 0}G</span>
+                            <span>💰 ${(saveData.gold !== undefined ? saveData.gold : (saveData.progress?.gold || 0)).toLocaleString()}G</span>
                         </div>
                     </div>
                     <div class="save-slot-actions">
@@ -1054,9 +1532,37 @@ function showToast(message, type = 'info') {
  * 게임 시작 시 저장 데이터 확인
  * 게임 시작 부분에서 호출하세요.
  */
-function checkSaveOnStart() {
+/**
+ * 게임 시작 시 저장 데이터 확인
+ * 게임 시작 부분에서 호출하세요.
+ */
+async function checkSaveOnStart() {
+    console.log('🔄 저장 데이터 확인 중...');
+    
+    // 1. 서버 저장 데이터 확인 (로그인 상태일 때)
+    if (typeof isLoggedIn === 'function' && isLoggedIn()) {
+        try {
+            const serverSave = await checkServerSave();
+            if (serverSave) {
+                const date = new Date(serverSave.savedAt).toLocaleString();
+                const msg = `☁️ 서버에 저장된 데이터가 있습니다.\n` +
+                           `플레이어: ${serverSave.playerName} (Lv.${serverSave.playerLevel})\n` +
+                           `저장일시: ${date}\n\n` +
+                           `서버 데이터를 불러오시겠습니까?`;
+                           
+                if (confirm(msg)) {
+                    await loadGameFromServer();
+                    return true;
+                }
+            }
+        } catch (e) {
+            console.error('서버 데이터 확인 중 오류:', e);
+        }
+    }
+
+    // 2. 로컬 저장 데이터 확인 (기존 로직)
     if (hasSaveData()) {
-        if (confirm('저장된 게임이 있습니다.\n이어서 하시겠습니까?')) {
+        if (confirm('브라우저에 저장된 게임이 있습니다.\n이어서 하시겠습니까?')) {
             showSaveLoadMenu('load');
             return true;
         }

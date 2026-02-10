@@ -10,11 +10,11 @@
 // ============================================
 
 // 인벤토리 슬롯 (최대 20개)
-let inventoryItems = [];
+var inventoryItems = [];
 const MAX_INVENTORY_SIZE = 20;
 
 // 장비 슬롯 (9개)
-let equipment = {
+var equipment = {
     helmet: null,
     armor: null,
     gloves: null,
@@ -54,23 +54,23 @@ const ITEMS_DATABASE = {
     // 전사
     old_longsword: {
         id: 'old_longsword',
-        name: '낡은 장검',
+        name: '낡은 대검',
         type: 'weapon',
         rarity: 'common',
         stats: { pAtk: 5 },
-        description: '낡았지만 쓸만한 장검입니다.',
+        description: '낡았지만 쓸만한 대검입니다.',
         icon: '⚔️',
         sellPrice: 10
     },
     old_heavy_leather_armor: {
         id: 'old_heavy_leather_armor',
-        name: '낡은 가죽 중갑옷',
+        name: '낡은 가죽 중갑',
         type: 'armor',
         rarity: 'common',
         stats: { pDef: 4, mDef: 2 },
-        description: '두꺼운 가죽으로 만든 중갑옷입니다.',
+        description: '두꺼운 가죽으로 만든 중갑입니다.',
         icon: '🥋',
-        sellPrice: 15
+        sellPrice: 10
     },
     // 궁수
     crude_bow: {
@@ -78,7 +78,7 @@ const ITEMS_DATABASE = {
         name: '조잡한 활',
         type: 'weapon',
         rarity: 'common',
-        stats: { pAtk: 6 },
+        stats: { pAtk: 5 },
         description: '조잡하게 만든 활이지만 사용 가능합니다.',
         icon: '🏹',
         sellPrice: 10
@@ -88,10 +88,10 @@ const ITEMS_DATABASE = {
         name: '낡은 사냥복',
         type: 'armor',
         rarity: 'common',
-        stats: { pDef: 2, mDef: 1 },
+        stats: { pDef: 3, mDef: 1 },
         description: '가벼운 사냥복입니다. 방어력은 낮지만 움직이기 편합니다.',
         icon: '👕',
-        sellPrice: 8
+        sellPrice: 10
     },
     // 마법사
     crude_staff: {
@@ -99,7 +99,7 @@ const ITEMS_DATABASE = {
         name: '조잡한 지팡이',
         type: 'weapon',
         rarity: 'common',
-        stats: { mAtk: 6 },
+        stats: { mAtk: 5 },
         description: '마법을 담을 수 있는 조잡한 지팡이입니다.',
         icon: '🪄',
         sellPrice: 10
@@ -109,7 +109,7 @@ const ITEMS_DATABASE = {
         name: '낡은 로브',
         type: 'armor',
         rarity: 'common',
-        stats: { mDef: 3, pDef: 1 },
+        stats: { pDef: 3, mDef: 1 },
         description: '마법사가 입는 낡은 로브입니다.',
         icon: '🧥',
         sellPrice: 10
@@ -117,43 +117,43 @@ const ITEMS_DATABASE = {
     // 도적
     old_sword: {
         id: 'old_sword',
-        name: '낡은 검',
+        name: '낡은 단검',
         type: 'weapon',
         rarity: 'common',
-        stats: { pAtk: 4 },
-        description: '가볍고 빠른 낡은 검입니다.',
+        stats: { pAtk: 5 },
+        description: '가볍고 빠른 낡은 단검입니다.',
         icon: '🗡️',
-        sellPrice: 8
+        sellPrice: 10
     },
     old_leather_armor: {
         id: 'old_leather_armor',
-        name: '낡은 가죽갑옷',
+        name: '낡은 가죽 경갑',
         type: 'armor',
         rarity: 'common',
         stats: { pDef: 3, mDef: 1 },
-        description: '가벼운 가죽 갑옷입니다.',
+        description: '가벼운 가죽 경갑입니다.',
         icon: '🥋',
         sellPrice: 10
     },
     // ========== 일반 장비 ==========
     wooden_sword: {
         id: 'wooden_sword',
-        name: '나무 검',
+        name: '나무 단검',
         type: 'weapon',
         rarity: 'common',
         stats: { pAtk: 3 },
-        description: '초보 모험가용 나무 검입니다.',
+        description: '초보 모험가용 나무 단검입니다.',
         icon: '🗡️',
         sellPrice: 5
     },
     iron_sword: {
         id: 'iron_sword',
-        name: '철검',
+        name: '철 단검',
         type: 'weapon',
         rarity: 'uncommon',
         stats: { pAtk: 8 },
-        description: '든든한 철로 만든 검입니다.',
-        icon: '⚔️',
+        description: '든든한 철로 만든 단검입니다.',
+        icon: '🗡️',
         sellPrice: 25
     },
     leather_armor: {
@@ -408,6 +408,18 @@ function unequipItem(slot) {
  * 장비 스탯을 적용합니다. (새로운 스탯 시스템)
  */
 function applyEquipmentStats() {
+    // player가 없으면 스킵
+    if (typeof player === 'undefined' || player === null) {
+        console.warn('⚠️ applyEquipmentStats: player가 없어서 스킵합니다.');
+        return;
+    }
+    
+    // equipment가 없으면 스킵
+    if (typeof equipment === 'undefined' || equipment === null) {
+        console.warn('⚠️ applyEquipmentStats: equipment가 없어서 스킵합니다.');
+        return;
+    }
+    
     // 보너스 스탯 초기화
     let bonusPAtk = 0, bonusMAtk = 0;
     let bonusPDef = 0, bonusMDef = 0;

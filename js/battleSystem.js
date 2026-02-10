@@ -105,6 +105,11 @@ function startBattle(monsterTypes) {
         return;
     }
 
+    // 각 몬스터에 고유 battleIndex 할당 (상태이상 추적용)
+    monsters.forEach((monster, index) => {
+        monster.battleIndex = index;
+    });
+
     // 보스 몬스터가 있으면 도주 불가
     const hasBoss = monsters.some(m => m.isBoss);
 
@@ -523,7 +528,7 @@ function processReviveAfterDefeat(reviveLocation, reviveTimeHours, overlay) {
     // 메시지 변경: "7시간 후..."
     const messageDiv = overlay.querySelector('.death-message');
     if (messageDiv) {
-        messageDiv.innerHTML = `${reviveTimeHours}시간 후...<br><br>🏥 휴식처에서 눈을 떴다.`;
+        messageDiv.innerHTML = `${reviveTimeHours}시간 후...<br><br> 휴식처에서 눈을 떴다.`;
     }
 
     addGameLog(`😵 의식을 잃었습니다...`);
@@ -827,8 +832,8 @@ function useSelectedSkill(skillId) {
         addGameLog(`💥 총 ${totalDamage} 데미지!`);
     }
 
-    // 상태이상 적용
-    if (skill.effects?.statusEffect) {
+    // 상태이상 적용 (적이 살아있을 때만)
+    if (skill.effects?.statusEffect && targetMonster.hp > 0) {
         applyStatusEffect(targetMonster, skill.effects.statusEffect, skill.effects.statusDuration, totalDamage);
     }
 
@@ -859,13 +864,27 @@ function applyStatusEffect(target, effectId, duration, damage = 0) {
     const effect = STATUS_EFFECTS[effectId];
     if (!effect) return;
 
-    // 상태이상 저장
-    if (!battleState.monsterStatusEffects) battleState.monsterStatusEffects = {};
-    if (!battleState.monsterStatusEffects[target.name]) {
-        battleState.monsterStatusEffects[target.name] = {};
+    // 사망한 대상에게는 상태이상을 적용하지 않음
+    if (target.hp <= 0) {
+        return;
     }
 
-    battleState.monsterStatusEffects[target.name][effectId] = {
+    // 상태이상 저장 (battleIndex를 사용하여 고유 식별)
+    if (!battleState.monsterStatusEffects) battleState.monsterStatusEffects = {};
+    
+    // 고유 식별자 생성: battleIndex 사용 (없으면 이름+인덱스 조합)
+    const monsterId = target.battleIndex !== undefined 
+        ? `monster_${target.battleIndex}` 
+        : target.name;
+    
+    if (!battleState.monsterStatusEffects[monsterId]) {
+        battleState.monsterStatusEffects[monsterId] = {};
+    }
+
+    // 대상에게 monsterId 저장 (나중에 참조용)
+    target.statusEffectId = monsterId;
+
+    battleState.monsterStatusEffects[monsterId][effectId] = {
         duration: duration,
         damage: damage  // 화상용 피해량 저장
     };
@@ -877,11 +896,15 @@ function applyStatusEffect(target, effectId, duration, damage = 0) {
  * 몬스터의 상태이상 효과를 처리합니다. (턴마다 호출)
  */
 function processMonsterStatusEffects(monster) {
-    if (!battleState.monsterStatusEffects || !battleState.monsterStatusEffects[monster.name]) {
+    // 고유 식별자 사용
+    const monsterId = monster.statusEffectId || 
+        (monster.battleIndex !== undefined ? `monster_${monster.battleIndex}` : monster.name);
+    
+    if (!battleState.monsterStatusEffects || !battleState.monsterStatusEffects[monsterId]) {
         return;
     }
 
-    const effects = battleState.monsterStatusEffects[monster.name];
+    const effects = battleState.monsterStatusEffects[monsterId];
     const effectsToRemove = [];
 
     Object.keys(effects).forEach(effectId => {
@@ -925,8 +948,22 @@ function processMonsterStatusEffects(monster) {
         // 상태이상으로 처치 확인
         if (monster.hp <= 0) {
             monster.hp = 0;
-            updateBattleUI();
-            setTimeout(() => endBattle('victory'), 500);
+            addGameLog(`💀 ${getMonsterNameWithColor(monster)}을(를) 처치했습니다!`);
+            
+            // 해당 몬스터의 상태이상 효과 모두 제거
+            delete battleState.monsterStatusEffects[monsterId];
+            
+            // 모든 몬스터 생존 여부 확인
+            const aliveMonsters = battleState.monsters.filter(m => m.hp > 0);
+            if (aliveMonsters.length === 0) {
+                updateBattleUI();
+                setTimeout(() => endBattle('victory'), 500);
+                return;
+            } else {
+                // 다음 생존 몬스터로 자동 타겟 변경
+                selectNextAliveMonster();
+                updateBattleUI();
+            }
         }
     });
 
@@ -942,7 +979,11 @@ function processMonsterStatusEffects(monster) {
 function checkMonsterConfusion(monster) {
     if (!battleState.monsterStatusEffects) return false;
     
-    const effects = battleState.monsterStatusEffects[monster.name];
+    // 고유 식별자 사용
+    const monsterId = monster.statusEffectId || 
+        (monster.battleIndex !== undefined ? `monster_${monster.battleIndex}` : monster.name);
+    
+    const effects = battleState.monsterStatusEffects[monsterId];
     if (!effects || !effects.confusion) return false;
     
     return effects.confusion.duration > 0;
@@ -954,7 +995,11 @@ function checkMonsterConfusion(monster) {
 function processMonsterStatusEffectsAfterAttack(monster) {
     if (!battleState.monsterStatusEffects) return;
     
-    const effects = battleState.monsterStatusEffects[monster.name];
+    // 고유 식별자 사용
+    const monsterId = monster.statusEffectId || 
+        (monster.battleIndex !== undefined ? `monster_${monster.battleIndex}` : monster.name);
+    
+    const effects = battleState.monsterStatusEffects[monsterId];
     if (!effects) return;
 
     const effectsToRemove = [];
@@ -973,13 +1018,13 @@ function processMonsterStatusEffectsAfterAttack(monster) {
             case 'bleed': // 출혈: 최대HP의 4% 피해 (방어 무시)
                 damage = Math.max(1, Math.round(monster.maxHp * (effectInfo.effects.hpPercent / 100)));
                 monster.hp -= damage;
-                addGameLog(`🩸 ${monster.name}이(가) 출혈로 ${damage} 피해!`);
+                addGameLog(`🩸 ${getMonsterNameWithColor(monster)}이(가) 출혈로 ${damage} 피해!`);
                 break;
 
             case 'burn': // 화상: 받은 피해의 20% 마법 피해
                 damage = Math.max(1, Math.round(effectData.damage * (effectInfo.effects.damagePercent / 100)));
                 monster.hp -= damage;
-                addGameLog(`🔥 ${monster.name}이(가) 화상으로 ${damage} 피해!`);
+                addGameLog(`🔥 ${getMonsterNameWithColor(monster)}이(가) 화상으로 ${damage} 피해!`);
                 break;
 
             case 'confusion': // 혼란: 공격 후 지속시간 감소
@@ -992,12 +1037,16 @@ function processMonsterStatusEffectsAfterAttack(monster) {
 
         if (effectData.duration <= 0) {
             effectsToRemove.push(effectId);
-            addGameLog(`💨 ${monster.name}의 ${effectInfo.name} 효과가 사라졌다!`);
+            addGameLog(`💨 ${getMonsterNameWithColor(monster)}의 ${effectInfo.name} 효과가 사라졌다!`);
         }
 
         // 상태이상으로 처치 확인
         if (monster.hp <= 0) {
             monster.hp = 0;
+            addGameLog(`💀 ${getMonsterNameWithColor(monster)}을(를) 처치했습니다!`);
+            
+            // 해당 몬스터의 상태이상 효과 모두 제거
+            delete battleState.monsterStatusEffects[monsterId];
         }
     });
 

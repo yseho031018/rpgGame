@@ -10,10 +10,10 @@
 // ============================================
 
 // 현재 맵
-let currentMapId = 'training';
+var currentMapId = 'training';
 
 // 현재 맵 내 위치
-let currentLocationId = 'entrance';
+var currentLocationId = 'entrance';
 
 // 맵별 클리어 상태
 let mapClearStatus = {
@@ -1157,7 +1157,7 @@ function createExploreItem(foundItem) {
         'rusty_longsword': {
             type: 'weapon',
             rarity: 'common',
-            description: '녹이 슨 장검입니다.',
+            description: '녹이 슨 대검입니다.',
             icon: '⚔️',
             stats: { pAtk: 5 },
             sellPrice: 12
@@ -1165,7 +1165,7 @@ function createExploreItem(foundItem) {
         'rusty_sword': {
             type: 'weapon',
             rarity: 'common',
-            description: '녹이 슨 검입니다.',
+            description: '녹이 슨 단검입니다.',
             icon: '🗡️',
             stats: { pAtk: 3 },
             sellPrice: 8

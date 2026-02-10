@@ -17,54 +17,106 @@
  * - 직업별 무기/방어구, 소모품, 재료 판매
  */
 const SHOP_ITEMS = {
-    // ===== 직업별 무기 =====
+    // ===== 구리 무기 (Tier 1) =====
+    copperWeapons: {
+        warrior: {
+            id: 'copper_longsword',
+            name: '구리 대검',
+            type: 'weapon',
+            rarity: 'common',
+            stats: { pAtk: 7 },
+            description: '구리로 만든 전사용 대검입니다. 초보자에게 적합합니다.',
+            icon: '⚔️',
+            price: 150,
+            sellPrice: 75,
+            job: 'warrior'
+        },
+        archer: {
+            id: 'copper_bow',
+            name: '구리 활',
+            type: 'weapon',
+            rarity: 'common',
+            stats: { pAtk: 7 },
+            description: '구리로 보강된 궁수용 활입니다.',
+            icon: '🏹',
+            price: 150,
+            sellPrice: 75,
+            job: 'archer'
+        },
+        mage: {
+            id: 'copper_staff',
+            name: '구리 지팡이',
+            type: 'weapon',
+            rarity: 'common',
+            stats: { mAtk: 7 },
+            description: '구리 장식이 달린 마법사용 지팡이입니다.',
+            icon: '🪄',
+            price: 150,
+            sellPrice: 75,
+            job: 'mage'
+        },
+        skirmisher: {
+            id: 'copper_sword',
+            name: '구리 단검',
+            type: 'weapon',
+            rarity: 'common',
+            stats: { pAtk: 7 },
+            description: '구리로 만든 도적용 단검입니다. 가볍고 날카롭습니다.',
+            icon: '🗡️',
+            price: 150,
+            sellPrice: 75,
+            job: 'skirmisher'
+        }
+    },
+
+    // ===== 평범한 무기 (Tier 2) =====
     weapons: {
         warrior: {
             id: 'plain_longsword',
-            name: '평범한 장검',
+            name: '평범한 대검',
             type: 'weapon',
-            rarity: 'common',
-            stats: { pAtk: 8 },
-            description: '전사용 평범한 장검입니다. 기본기에 충실합니다.',
+            rarity: 'uncommon',
+            stats: { pAtk: 10, str: 1 },
+            description: '전사용 평범한 대검입니다. 기본기에 충실합니다.',
             icon: '⚔️',
-            price: 50,
-            sellPrice: 25,
+            price: 300,
+            sellPrice: 150,
             job: 'warrior'
         },
         archer: {
             id: 'plain_bow',
             name: '평범한 활',
             type: 'weapon',
-            rarity: 'common',
-            stats: { pAtk: 7 },
-            description: '궁수용 평범한 활입니다. 초보자에게 적합합니다.',
+            rarity: 'uncommon',
+            stats: { pAtk: 10, str: 1 },
+            description: '궁수용 평범한 활입니다. 강한 장력을 자랑합니다.',
             icon: '🏹',
-            price: 50,
-            sellPrice: 25,
+            price: 300,
+            sellPrice: 150,
             job: 'archer'
         },
         mage: {
             id: 'plain_staff',
             name: '평범한 지팡이',
             type: 'weapon',
-            rarity: 'common',
-            stats: { mAtk: 8 },
+            rarity: 'uncommon',
+            stats: { mAtk: 10, int: 1 },
             description: '마법사용 평범한 지팡이입니다. 마력을 담기에 적합합니다.',
             icon: '🪄',
-            price: 50,
-            sellPrice: 25,
+            price: 300,
+            sellPrice: 150,
             job: 'mage'
         },
         skirmisher: {
             id: 'plain_sword',
-            name: '평범한 검',
+            name: '평범한 단검',
             type: 'weapon',
-            rarity: 'common',
-            stats: { pAtk: 7 },
-            description: '도적용 평범한 검입니다. 가볍고 빠릅니다.',
+            rarity: 'uncommon',
+            stats: { pAtk: 10, agi: 1 },
+            description: '도적용 평범한 단검입니다. 가볍고 빠릅니다.',
             icon: '🗡️',
-            price: 50,
-            sellPrice: 25,
+            price: 300,
+            sellPrice: 150,
             job: 'skirmisher'
         }
     },
@@ -78,7 +130,7 @@ const SHOP_ITEMS = {
                 name: '튼튼한 가죽 중갑',
                 type: 'armor',
                 rarity: 'common',
-                stats: { pDef: 6, mDef: 2 },
+                stats: { pDef: 6, mDef: 3 },
                 description: '질긴 가죽으로 만든 전사용 중갑입니다.',
                 icon: '🛡️',
                 price: 80,
@@ -90,7 +142,7 @@ const SHOP_ITEMS = {
                 name: '튼튼한 가죽 경갑',
                 type: 'armor',
                 rarity: 'common',
-                stats: { pDef: 4, mDef: 3 },
+                stats: { pDef: 5, mDef: 3 },
                 description: '질긴 가죽으로 만든 도적용 경갑입니다. 움직임이 자유롭습니다.',
                 icon: '🥋',
                 price: 80,
@@ -102,7 +154,7 @@ const SHOP_ITEMS = {
                 name: '튼튼한 가죽 사냥복',
                 type: 'armor',
                 rarity: 'common',
-                stats: { pDef: 3, mDef: 2 },
+                stats: { pDef: 4, mDef: 3 },
                 description: '질긴 가죽으로 만든 궁수용 사냥복입니다. 숲에서 위장에 유리합니다.',
                 icon: '👕',
                 price: 80,
@@ -114,7 +166,7 @@ const SHOP_ITEMS = {
                 name: '튼튼한 가죽 로브',
                 type: 'armor',
                 rarity: 'common',
-                stats: { pDef: 2, mDef: 4 },
+                stats: { pDef: 3, mDef: 4 },
                 description: '질긴 가죽 안감이 달린 마법사용 로브입니다.',
                 icon: '🧥',
                 price: 80,
@@ -129,11 +181,11 @@ const SHOP_ITEMS = {
                 name: '구리 중갑',
                 type: 'armor',
                 rarity: 'uncommon',
-                stats: { pDef: 10, mDef: 3 },
+                stats: { pDef: 8, mDef: 5 },
                 description: '구리판으로 보강된 전사용 중갑입니다. 묵직한 방어력을 자랑합니다.',
                 icon: '🛡️',
-                price: 120,
-                sellPrice: 60,
+                price: 190,
+                sellPrice: 95,
                 job: 'warrior'
             },
             skirmisher: {
@@ -141,11 +193,11 @@ const SHOP_ITEMS = {
                 name: '구리 경갑',
                 type: 'armor',
                 rarity: 'uncommon',
-                stats: { pDef: 7, mDef: 4 },
+                stats: { pDef: 8, mDef: 4 },
                 description: '구리 조각으로 보강된 도적용 경갑입니다. 민첩성을 유지하면서 방어력을 높였습니다.',
                 icon: '🥋',
-                price: 120,
-                sellPrice: 60,
+                price: 190,
+                sellPrice: 95,
                 job: 'skirmisher'
             },
             archer: {
@@ -153,11 +205,11 @@ const SHOP_ITEMS = {
                 name: '구리 보강 사냥복',
                 type: 'armor',
                 rarity: 'uncommon',
-                stats: { pDef: 5, mDef: 4 },
+                stats: { pDef: 6, mDef: 4 },
                 description: '구리판으로 어깨와 가슴을 보강한 궁수용 사냥복입니다.',
                 icon: '👕',
-                price: 120,
-                sellPrice: 60,
+                price: 190,
+                sellPrice: 95,
                 job: 'archer'
             },
             mage: {
@@ -165,11 +217,11 @@ const SHOP_ITEMS = {
                 name: '구리 문양 로브',
                 type: 'armor',
                 rarity: 'uncommon',
-                stats: { pDef: 4, mDef: 8 },
+                stats: { pDef: 5, mDef: 7 },
                 description: '마력 증폭을 위한 구리 문양이 새겨진 마법사용 로브입니다.',
                 icon: '🧥',
-                price: 120,
-                sellPrice: 60,
+                price: 190,
+                sellPrice: 95,
                 job: 'mage'
             }
         },
@@ -180,11 +232,11 @@ const SHOP_ITEMS = {
                 name: '철 중갑',
                 type: 'armor',
                 rarity: 'uncommon',
-                stats: { pDef: 15, mDef: 5 },
+                stats: { pDef: 12, mDef: 8, str: 1 },
                 description: '단단한 철판으로 만든 전사용 중갑입니다. 최고의 물리 방어력을 자랑합니다.',
                 icon: '🛡️',
-                price: 180,
-                sellPrice: 90,
+                price: 400,
+                sellPrice: 200,
                 job: 'warrior'
             },
             skirmisher: {
@@ -192,11 +244,11 @@ const SHOP_ITEMS = {
                 name: '철 경갑',
                 type: 'armor',
                 rarity: 'uncommon',
-                stats: { pDef: 10, mDef: 6 },
+                stats: { pDef: 10, mDef: 6, agi: 1 },
                 description: '경량화된 철판으로 만든 도적용 경갑입니다.',
                 icon: '🥋',
-                price: 180,
-                sellPrice: 90,
+                price: 400,
+                sellPrice: 200,
                 job: 'skirmisher'
             },
             archer: {
@@ -204,11 +256,11 @@ const SHOP_ITEMS = {
                 name: '철판 사냥복',
                 type: 'armor',
                 rarity: 'uncommon',
-                stats: { pDef: 8, mDef: 5 },
+                stats: { pDef: 8, mDef: 6, agi: 1 },
                 description: '철판으로 요소요소를 보강한 궁수용 사냥복입니다. 방어력이 크게 향상되었습니다.',
                 icon: '👕',
-                price: 180,
-                sellPrice: 90,
+                price: 400,
+                sellPrice: 200,
                 job: 'archer'
             },
             mage: {
@@ -216,11 +268,11 @@ const SHOP_ITEMS = {
                 name: '철사 직조 로브',
                 type: 'armor',
                 rarity: 'uncommon',
-                stats: { pDef: 6, mDef: 12 },
+                stats: { pDef: 7, mDef: 10, int: 1 },
                 description: '마법 강화된 철사로 직조된 마법사용 로브입니다. 방어력과 마법 저항력이 뛰어납니다.',
                 icon: '🧥',
-                price: 180,
-                sellPrice: 90,
+                price: 400,
+                sellPrice: 200,
                 job: 'mage'
             }
         }

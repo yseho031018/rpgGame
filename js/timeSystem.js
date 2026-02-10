@@ -11,10 +11,10 @@
 // ============================================
 
 // 게임 시작 시간 (현실 시간)
-let gameTimeOrigin = Date.now();
+var gameTimeOrigin = Date.now();
 
 // 게임 내 시작 시간 (기본: 오전 8시)
-let gameStartHour = 8;
+var gameStartHour = 8;
 
 // ============================================
 // 🕐 시간 계산 함수

@@ -12,14 +12,14 @@
 let currentScreen = 'loading';
 
 // 플레이어 데이터
-let player = null;
+var player = null;
 
 // 게임 진행 데이터
-let gold = 0;
+var gold = 0;
 let inventory = [];
 
 // 플레이 시간
-let gameStartTime = null;
+var gameStartTime = null;
 
 // ============================================
 // 🚀 게임 초기화 및 로딩
@@ -66,6 +66,13 @@ function startLoading() {
 
             setTimeout(() => {
                 showScreen('mainMenu');
+                
+                // 저장된 데이터 확인 (약간의 지연 후 실행)
+                setTimeout(() => {
+                    if (typeof checkSaveOnStart === 'function') {
+                        checkSaveOnStart();
+                    }
+                }, 500);
             }, 500);
         } else {
             loadingBar.style.width = progress + '%';
@@ -750,31 +757,53 @@ function giveStartingEquipment(equipmentIds) {
 function initGameScreen() {
     if (!player) return;
 
-    // 시작 시 HP/MP를 최대치로 설정
-    player.hp = player.maxHp;
-    player.mp = player.maxMp;
+    // 불러오기 중이 아닐 때만 초기화 작업 수행 (새 게임일 때만)
+    if (!window.isLoadingGame) {
+        // 시작 시 HP/MP를 최대치로 설정
+        player.hp = player.maxHp;
+        player.mp = player.maxMp;
 
-    // 시간 시스템 시작
-    if (typeof resetGameTime === 'function') {
-        resetGameTime(8);
+        // 시간 시스템 리셋 (새 게임일 때만)
+        if (typeof resetGameTime === 'function') {
+            resetGameTime(8);
+        }
+
+        // 맵 초기화 (새 게임일 때만)
+        if (typeof travelToMap === 'function') {
+            travelToMap('training');
+        }
+
+        // 게임 로그 초기화
+        if (typeof clearGameLog === 'function') {
+            clearGameLog();
+        }
+        if (typeof addGameLog === 'function') {
+            addGameLog(`${player.name}님, 모험을 시작합니다!`);
+            addGameLog('훈련장에서 기초를 다져보세요.');
+        }
+    } else {
+        // 불러오기 시 로그 표시
+        if (typeof addGameLog === 'function') {
+            addGameLog(`${player.name}님, 모험을 다시 시작합니다!`);
+            addGameLog('저장된 데이터를 불러왔습니다.');
+        }
+        // 플래그 리셋
+        window.isLoadingGame = false;
     }
+
+    // 시간 시스템 시작 (항상 필요)
     if (typeof startTimeSystem === 'function') {
         startTimeSystem();
     }
 
-    // 배고픔/수분 시스템 시작
+    // 배고픔/수분 시스템 시작 (항상 필요)
     if (typeof startHungerSystem === 'function') {
         startHungerSystem();
     }
 
-    // 날씨 시스템 시작
+    // 날씨 시스템 시작 (항상 필요)
     if (typeof startWeatherSystem === 'function') {
         startWeatherSystem();
-    }
-
-    // 맵 초기화
-    if (typeof travelToMap === 'function') {
-        travelToMap('training');
     }
 
     // UI 업데이트
@@ -782,15 +811,6 @@ function initGameScreen() {
 
     // 플레이 시간 업데이트 시작
     startPlayTimeUpdate();
-
-    // 게임 로그 초기화
-    if (typeof clearGameLog === 'function') {
-        clearGameLog();
-    }
-    if (typeof addGameLog === 'function') {
-        addGameLog(`${player.name}님, 모험을 시작합니다!`);
-        addGameLog('훈련장에서 기초를 다져보세요.');
-    }
 }
 
 function updatePlayerUI() {
