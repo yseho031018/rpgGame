@@ -621,9 +621,23 @@ function startSpar(npcId) {
         return;
     }
 
-    // 이미 보상을 수령한 경우 대련 불가
+    // 이미 보상을 수령한 경우 대련 거절 대사 표시
     if (player.sparRewardsReceived && player.sparRewardsReceived[sparMonster.id]) {
-        addGameLog(`⚔️ ${npc.name}: "이미 한번 승부를 겨뤘지 않은가. 더 이상의 대련은 불필요하네."`);
+        // NPC별 거절 대사 설정
+        const refusalDialogues = {
+            instructor2: '자네는 이미 내 활솜씨를 넘어섰네. 더 넓은 세상의 적들과 겨뤄보게나. 자네의 앞길에 행운을 빌겠네.',
+            instructor3: '호오, 또 대련을 원하나? 하하, 이제 자네는 나와 대련할 필요가 없을 정도로 강하네. 더 넓은 세상에서 활약해보게나.',
+            instructor4: '자네의 실력은 이미 내가 가르칠 수준을 넘어섰어. 그 빠른 검술로 더 강한 적들에게 도전해보게. 기대하고 있겠네.',
+            senior_instructor: '허허, 자네가 또 나에게 도전하겠다고? 이미 나를 넘어선 자네에게 더 가르칠 것이 없네. 진정한 시련은 이 훈련장 밖에 있다네. 가서 세상을 구해보게나.'
+        };
+        const refusalText = refusalDialogues[npcId] || '이제 자네는 나와 대련할 필요가 없을 정도로 강하네. 더 넓은 세상에서 활약해보게나.';
+
+        // 대화 버블 내용을 거절 대사로 변경
+        const bubble = document.querySelector('.npc-dialog-bubble p');
+        if (bubble) {
+            bubble.textContent = refusalText;
+        }
+        addGameLog(`⚔️ ${npc.name}: "${refusalText}"`);
         return;
     }
 
@@ -822,6 +836,8 @@ function createShopItemElement(item) {
     }
 
     const canAfford = (gold || 0) >= item.price;
+    // 소모품/재료는 수량 조절 가능, 무기/방어구는 1개만 구매
+    const isStackable = (item.type === 'consumable' || item.type === 'material');
 
     div.innerHTML = `
         <div class="shop-item-icon">${item.icon}</div>
@@ -830,15 +846,74 @@ function createShopItemElement(item) {
             <div class="shop-item-desc">${item.description}</div>
             ${item.stats ? `<div class="shop-item-stats">${formatItemStats(item.stats)}</div>` : ''}
         </div>
-        <div class="shop-item-price ${canAfford ? '' : 'not-afford'}">
-            💰 ${item.price}G
+        <div class="shop-item-right">
+            <div class="shop-item-price ${canAfford ? '' : 'not-afford'}">
+                💰 <span id="buyPrice_${item.id}">${item.price}</span>G
+            </div>
+            ${isStackable && !item.otherJob ? `
+            <div class="shop-quantity-control" data-item-id="${item.id}" data-unit-price="${item.price}">
+                <button class="qty-btn qty-minus" onclick="changeShopQty('${item.id}', -1)">−</button>
+                <input type="number" class="qty-input" id="qty_${item.id}" value="1" min="1" max="99" onchange="updateShopQty('${item.id}')">
+                <button class="qty-btn qty-plus" onclick="changeShopQty('${item.id}', 1)">+</button>
+            </div>
+            ` : ''}
+            <button class="shop-buy-btn" onclick="buyItem('${item.id}')" ${!canAfford || item.otherJob ? 'disabled' : ''}>
+                ${item.otherJob ? '다른 직업' : (canAfford ? '구매' : '골드 부족')}
+            </button>
         </div>
-        <button class="shop-buy-btn" onclick="buyItem('${item.id}')" ${!canAfford || item.otherJob ? 'disabled' : ''}>
-            ${item.otherJob ? '다른 직업' : (canAfford ? '구매' : '골드 부족')}
-        </button>
     `;
 
     return div;
+}
+
+/**
+ * 상점 구매 수량을 변경합니다.
+ * @param {string} itemId - 아이템 ID
+ * @param {number} delta - 변경량 (+1 또는 -1)
+ */
+function changeShopQty(itemId, delta) {
+    const input = document.getElementById(`qty_${itemId}`);
+    if (!input) return;
+    let val = parseInt(input.value) || 1;
+    val = Math.max(1, Math.min(99, val + delta));
+    input.value = val;
+    updateShopQty(itemId);
+}
+
+/**
+ * 상점 구매 수량 입력 시 가격을 업데이트합니다.
+ * @param {string} itemId - 아이템 ID
+ */
+function updateShopQty(itemId) {
+    const input = document.getElementById(`qty_${itemId}`);
+    if (!input) return;
+    let val = parseInt(input.value) || 1;
+    val = Math.max(1, Math.min(99, val));
+    input.value = val;
+
+    const control = input.closest('.shop-quantity-control');
+    const unitPrice = parseInt(control?.dataset?.unitPrice) || 0;
+    const totalPrice = unitPrice * val;
+
+    const priceSpan = document.getElementById(`buyPrice_${itemId}`);
+    if (priceSpan) {
+        priceSpan.textContent = totalPrice;
+        // 가격 색상 업데이트
+        const priceDiv = priceSpan.closest('.shop-item-price');
+        if (priceDiv) {
+            priceDiv.classList.toggle('not-afford', (gold || 0) < totalPrice);
+        }
+    }
+
+    // 구매 버튼 상태 업데이트
+    const shopItem = input.closest('.shop-item');
+    if (shopItem) {
+        const buyBtn = shopItem.querySelector('.shop-buy-btn');
+        if (buyBtn && !shopItem.classList.contains('other-job')) {
+            buyBtn.disabled = (gold || 0) < totalPrice;
+            buyBtn.textContent = (gold || 0) < totalPrice ? '골드 부족' : '구매';
+        }
+    }
 }
 
 /**
@@ -884,6 +959,8 @@ function showSellItems() {
         if (!item) return;
 
         const sellPrice = item.sellPrice || Math.floor((item.price || 10) / 2);
+        const maxQty = item.quantity || 1;
+        const isStackable = maxQty > 1;
 
         const div = document.createElement('div');
         div.className = `shop-item ${item.rarity || 'common'}`;
@@ -891,15 +968,24 @@ function showSellItems() {
         div.innerHTML = `
             <div class="shop-item-icon">${item.icon || '📦'}</div>
             <div class="shop-item-info">
-                <div class="shop-item-name">${item.name}${item.quantity > 1 ? ` x${item.quantity}` : ''}</div>
+                <div class="shop-item-name">${item.name}${maxQty > 1 ? ` x${maxQty}` : ''}</div>
                 <div class="shop-item-desc">${item.description || ''}</div>
             </div>
-            <div class="shop-item-price sell-price">
-                💰 ${sellPrice}G
+            <div class="shop-item-right">
+                <div class="shop-item-price sell-price">
+                    💰 <span id="sellPrice_${index}">${sellPrice}</span>G
+                </div>
+                ${isStackable ? `
+                <div class="shop-quantity-control" data-slot-index="${index}" data-unit-price="${sellPrice}" data-max-qty="${maxQty}">
+                    <button class="qty-btn qty-minus" onclick="changeSellQty(${index}, -1)">−</button>
+                    <input type="number" class="qty-input" id="sellQty_${index}" value="1" min="1" max="${maxQty}" onchange="updateSellQty(${index})">
+                    <button class="qty-btn qty-plus" onclick="changeSellQty(${index}, 1)">+</button>
+                </div>
+                ` : ''}
+                <button class="shop-sell-btn" onclick="sellItem(${index})">
+                    판매
+                </button>
             </div>
-            <button class="shop-sell-btn" onclick="sellItem(${index})">
-                판매
-            </button>
         `;
 
         container.appendChild(div);
@@ -908,6 +994,7 @@ function showSellItems() {
 
 /**
  * 아이템을 구매합니다.
+ * @param {string} itemId - 아이템 ID
  */
 function buyItem(itemId) {
     // 모든 상점 아이템에서 해당 아이템 찾기
@@ -951,19 +1038,31 @@ function buyItem(itemId) {
         return;
     }
 
+    // 수량 확인 (수량 입력이 있으면 해당 수량, 없으면 1)
+    const qtyInput = document.getElementById(`qty_${itemId}`);
+    const quantity = qtyInput ? Math.max(1, parseInt(qtyInput.value) || 1) : 1;
+    const totalCost = item.price * quantity;
+
     // 골드 확인
-    if ((gold || 0) < item.price) {
+    if ((gold || 0) < totalCost) {
         addGameLog('❌ 골드가 부족합니다!');
         return;
     }
 
     // 구매 처리
-    gold -= item.price;
+    gold -= totalCost;
 
-    // 인벤토리에 아이템 추가
-    addItemToInventory(item.id, 1);
+    // 인벤토리에 아이템 추가 (수량만큼)
+    addItemToInventory(item.id, quantity);
 
-    addGameLog(`🛒 ${item.name}을(를) ${item.price}G에 구매했습니다!`);
+    if (quantity > 1) {
+        addGameLog(`🛒 ${item.name}을(를) ${quantity}개 ${totalCost}G에 구매했습니다!`);
+    } else {
+        addGameLog(`🛒 ${item.name}을(를) ${item.price}G에 구매했습니다!`);
+    }
+
+    // 수량 입력 초기화
+    if (qtyInput) qtyInput.value = 1;
 
     // UI 업데이트
     updateShopGoldDisplay();
@@ -977,7 +1076,45 @@ function buyItem(itemId) {
 }
 
 /**
+ * 판매 수량을 변경합니다.
+ * @param {number} slotIndex - 인벤토리 슬롯 인덱스
+ * @param {number} delta - 변경량 (+1 또는 -1)
+ */
+function changeSellQty(slotIndex, delta) {
+    const input = document.getElementById(`sellQty_${slotIndex}`);
+    if (!input) return;
+    const maxQty = parseInt(input.max) || 1;
+    let val = parseInt(input.value) || 1;
+    val = Math.max(1, Math.min(maxQty, val + delta));
+    input.value = val;
+    updateSellQty(slotIndex);
+}
+
+/**
+ * 판매 수량 입력 시 가격을 업데이트합니다.
+ * @param {number} slotIndex - 인벤토리 슬롯 인덱스
+ */
+function updateSellQty(slotIndex) {
+    const input = document.getElementById(`sellQty_${slotIndex}`);
+    if (!input) return;
+    const maxQty = parseInt(input.max) || 1;
+    let val = parseInt(input.value) || 1;
+    val = Math.max(1, Math.min(maxQty, val));
+    input.value = val;
+
+    const control = input.closest('.shop-quantity-control');
+    const unitPrice = parseInt(control?.dataset?.unitPrice) || 0;
+    const totalPrice = unitPrice * val;
+
+    const priceSpan = document.getElementById(`sellPrice_${slotIndex}`);
+    if (priceSpan) {
+        priceSpan.textContent = totalPrice;
+    }
+}
+
+/**
  * 아이템을 판매합니다.
+ * @param {number} slotIndex - 인벤토리 슬롯 인덱스
  */
 function sellItem(slotIndex) {
     if (!inventoryItems || !inventoryItems[slotIndex]) {
@@ -988,13 +1125,23 @@ function sellItem(slotIndex) {
     const item = inventoryItems[slotIndex];
     const sellPrice = item.sellPrice || Math.floor((item.price || 10) / 2);
 
+    // 수량 확인 (수량 입력이 있으면 해당 수량, 없으면 1)
+    const qtyInput = document.getElementById(`sellQty_${slotIndex}`);
+    const maxQty = item.quantity || 1;
+    const quantity = qtyInput ? Math.max(1, Math.min(maxQty, parseInt(qtyInput.value) || 1)) : 1;
+    const totalGold = sellPrice * quantity;
+
     // 판매 처리
-    gold = (gold || 0) + sellPrice;
+    gold = (gold || 0) + totalGold;
 
-    // 인벤토리에서 제거
-    removeItemFromInventory(slotIndex, 1);
+    // 인벤토리에서 제거 (수량만큼)
+    removeItemFromInventory(slotIndex, quantity);
 
-    addGameLog(`💰 ${item.name}을(를) ${sellPrice}G에 판매했습니다!`);
+    if (quantity > 1) {
+        addGameLog(`💰 ${item.name}을(를) ${quantity}개 ${totalGold}G에 판매했습니다!`);
+    } else {
+        addGameLog(`💰 ${item.name}을(를) ${sellPrice}G에 판매했습니다!`);
+    }
 
     // UI 업데이트
     updateShopGoldDisplay();

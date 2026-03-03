@@ -774,12 +774,14 @@ function showGameOverScreen() {
             // 일시적 버프로 인한 스탯 보너스 초기화
             if (player.tempBuffStats) player.tempBuffStats = {};
             
-            // 전투 전 위치로 복원
-            if (preBattleLocationId && typeof currentLocationId !== 'undefined') {
-                currentLocationId = preBattleLocationId;
-            }
+            // 패배한 맵의 입구로 이동 (전투 위치가 아닌 맵 입구에서 재시작)
             if (preBattleMapId && typeof currentMapId !== 'undefined') {
                 currentMapId = preBattleMapId;
+            }
+            if (typeof currentLocationId !== 'undefined') {
+                // 해당 맵의 기본 위치(entrance)로 설정
+                const retryMap = (typeof MAPS !== 'undefined' && preBattleMapId) ? MAPS[preBattleMapId] : null;
+                currentLocationId = (retryMap && retryMap.defaultLocation) ? retryMap.defaultLocation : 'entrance';
             }
             
             // 시간 7시간 경과

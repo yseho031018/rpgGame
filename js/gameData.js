@@ -2159,7 +2159,7 @@ const MONSTERS = {
     },
     death_knight: {
         id: 'death_knight',
-        name: '데스나이트',
+        name: '저주받은 경비대장',
         type: 'miniboss',
         tier: 5,
         hp: 350, atk: 35, pDef: 10, mDef: 10,

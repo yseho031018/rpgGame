@@ -3405,6 +3405,75 @@ body {
     color: #2ecc71;
 }
 
+/* 상점 아이템 오른쪽 영역 (가격 + 수량 + 버튼) */
+.shop-item-right {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 100px;
+}
+
+/* 수량 조절 컨트롤 */
+.shop-quantity-control {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.qty-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+}
+
+.qty-btn:hover {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: var(--secondary);
+}
+
+.qty-btn:active {
+    transform: scale(0.9);
+}
+
+.qty-input {
+    width: 42px;
+    height: 28px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.4);
+    color: white;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-body);
+    -moz-appearance: textfield;
+}
+
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+.qty-input:focus {
+    outline: none;
+    border-color: var(--secondary);
+    box-shadow: 0 0 8px rgba(77, 168, 218, 0.4);
+}
+
 .shop-buy-btn,
 .shop-sell-btn {
     padding: 10px 20px;
@@ -3479,6 +3548,22 @@ body {
     .shop-sell-btn {
         padding: 8px 15px;
         font-size: 13px;
+    }
+
+    .shop-quantity-control {
+        gap: 2px;
+    }
+
+    .qty-btn {
+        width: 24px;
+        height: 24px;
+        font-size: 14px;
+    }
+
+    .qty-input {
+        width: 36px;
+        height: 24px;
+        font-size: 12px;
     }
 }
 
