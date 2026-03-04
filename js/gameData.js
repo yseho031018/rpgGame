@@ -789,11 +789,11 @@ const MAPS = {
                 connections: ['floor_3', 'floor_5']
             },
 
-            // 5층 - 엘프와 드워프의 방 (Lv.25)
+            // 5층 - 이종족들의 터전(Lv.25)
             floor_5: {
                 id: 'floor_5',
                 name: '5층 - 종족의 전당',
-                description: '엘프와 드워프 전사들의 시험장. 정예 전사들이 기다린다.',
+                description: '엘프와 드워프, 오우거, 오크종족이 살고있는곳이다. 호수에서 수상함이 느껴진다.',
                 actions: ['move', 'battle'],
                 canBattle: true,
                 floor: 5,
@@ -1602,6 +1602,101 @@ const STATS_CONFIG = {
 };
 
 // ============================================
+// ⚡ 스킬 레벨 시스템
+// ============================================
+
+/**
+ * 스킬 레벨에 따른 효과 배율을 계산합니다.
+ * 레벨 1: 기본값(100%), 레벨 2~9: 레벨당 10%씩 증가, 레벨 10: 200% (9→10 레벨 시 20% 증가)
+ * @param {number} level - 스킬 레벨 (1~10)
+ * @returns {number} - 배율 (1.0 ~ 2.0)
+ */
+function getSkillLevelMultiplier(level) {
+    level = Math.max(1, Math.min(10, level || 1));
+    if (level === 1) return 1.0;
+    if (level <= 9) return 1.0 + (level - 1) * 0.1;
+    // 10레벨: 9레벨(1.8) + 0.2 = 2.0
+    return 2.0;
+}
+
+/**
+ * 스킬 레벨에 따른 실제 효과 수치를 계산합니다.
+ * @param {number} baseValue - 1레벨 기본 수치
+ * @param {number} level - 스킬 레벨 (1~10)
+ * @returns {number} - 레벨 적용된 수치
+ */
+function getScaledValue(baseValue, level) {
+    return Math.round(baseValue * getSkillLevelMultiplier(level));
+}
+
+/**
+ * 강타의 혼란 레벨을 계산합니다.
+ * 스킬 레벨 2 증가마다 혼란 레벨 1 증가 (1레벨→혼란1, 3레벨→혼란2, 5레벨→혼란3...)
+ * @param {number} smashLevel - 강타 스킬 레벨
+ * @returns {number} - 혼란 상태이상 레벨
+ */
+function getSmashConfusionLevel(smashLevel) {
+    return Math.max(1, 1 + Math.floor((smashLevel - 1) / 2));
+}
+
+/**
+ * 멀티샷의 최대 선택 대상 수를 계산합니다.
+ * 기본 2명, 스킬 레벨 2 증가마다 +1
+ * @param {number} level - 멀티샷 스킬 레벨
+ * @returns {number} - 최대 선택 대상 수
+ */
+function getMultishotMaxTargets(level) {
+    return 2 + Math.floor((level - 1) / 2);
+}
+
+/**
+ * 라이트닝볼트의 추가 랜덤 타격 수를 계산합니다.
+ * 스킬 레벨 2 증가마다 추가 1명, 최대레벨 시 +1 추가
+ * @param {number} level - 라이트닝볼트 스킬 레벨
+ * @returns {number} - 랜덤 추가 타격 수
+ */
+function getLightningBoltBounces(level) {
+    let bounces = Math.floor((level - 1) / 2);
+    if (level === 10) bounces += 1; // 최대레벨 보너스
+    return bounces;
+}
+
+/**
+ * 투지의 검 지속시간 및 쿨타임을 계산합니다.
+ * @param {number} level - 투지의 검 스킬 레벨
+ * @returns {Object} - { duration, cooldown }
+ */
+function getSpiritSwordDuration(level) {
+    let duration = 3;
+    let cooldown = 2;
+    if (level >= 5) duration += 1; // 5레벨 이상: 지속시간 +1
+    if (level >= 10) cooldown = 1; // 최대레벨: 쿨타임 1턴
+    return { duration, cooldown };
+}
+
+/**
+ * 기습의 물리방어력 무시 비율을 계산합니다.
+ * @param {number} level - 기습 스킬 레벨
+ * @returns {number} - 방어력 무시 비율(%)
+ */
+function getAmbushArmorPen(level) {
+    return getScaledValue(50, level);
+}
+
+/**
+ * 차지샷의 차지 피해량을 계산합니다.
+ * @param {number} level - 차지샷 스킬 레벨
+ * @returns {Object} - { instantPercent, chargedPercent, splashPercent }
+ */
+function getChargeShotValues(level) {
+    return {
+        instantPercent: getScaledValue(200, level),
+        chargedPercent: getScaledValue(400, level),
+        splashPercent: getScaledValue(40, level)
+    };
+}
+
+// ============================================
 // ⚡ 스킬 데이터
 // ============================================
 
@@ -1610,16 +1705,18 @@ const SKILLS = {
     smash: {
         id: 'smash',
         name: '강타',
-        description: '강력한 일격으로 적 1명에게 물리공격력의 200% 피해를 주고 혼란 상태를 1턴간 부여합니다.',
+        description: '지정한 적 한 명에게 물리공격력의 200% 피해를 주고, 혼란 상태이상을 부여합니다. 레벨 2 증가마다 혼란 레벨 +1.',
         type: 'active',
         damageType: 'physical',
-        mpCost: 15,
+        mpCost: 20,
         cooldown: 2,
-        targetType: 'single',  // 단일 대상
+        targetType: 'single',
+        maxLevel: 10,
         effects: {
-            damagePercent: 200,
+            damagePercent: 200,          // 1레벨 기준
             statusEffect: 'confusion',
-            statusDuration: 1
+            statusDuration: 2,           // 혼란 지속 2턴
+            confusionLevelFormula: 'getSmashConfusionLevel'  // 혼란 레벨 계산 함수 참조
         },
         icon: '💥'
     },
@@ -1627,16 +1724,19 @@ const SKILLS = {
     multishot: {
         id: 'multishot',
         name: '멀티샷',
-        description: '최대 2명의 적에게 일반공격을 합니다. 1명 선택 시 2회 공격합니다.',
+        description: '최대 2명의 적을 선택하여 물리공격력의 100% 일반공격. 레벨 2 증가마다 최대 선택 대상 +1. 대상별 자유 배분 공격 가능.',
         type: 'active',
         damageType: 'physical',
-        mpCost: 12,
+        mpCost: 20,
         cooldown: 2,
-        targetType: 'multi',   // 다중 대상
-        maxTargets: 2,
+        targetType: 'multi',
+        maxLevel: 10,
+        maxTargets: 2,              // 1레벨 기준, 레벨에 따라 증가
         effects: {
-            attackCount: 1,    // 대상당 공격 횟수
-            singleTargetBonus: 2  // 1명 선택시 2회 공격
+            damagePercent: 100,         // 일반공격 배율 (레벨로 스케일링)
+            attackCount: 2,             // 1레벨 기준 총 공격 횟수 = maxTargets
+            maxTargetsFormula: 'getMultishotMaxTargets',
+            freeTargetDistribution: true  // 자유 배분 공격 가능 플래그
         },
         icon: '🎯'
     },
@@ -1644,32 +1744,35 @@ const SKILLS = {
     fireball: {
         id: 'fireball',
         name: '파이어볼',
-        description: '최대 3명의 적에게 마법공격력의 200% 피해를 주고 화상 상태를 2턴간 부여합니다.',
+        description: '선택한 적과 인접한 적에게 마법공격력의 200% 피해를 가하고, 화상 상태이상을 2턴간 부여합니다. 몇 명을 타격해도 피해량 동일.',
         type: 'active',
         damageType: 'magical',
-        mpCost: 20,
+        mpCost: 30,
         cooldown: 3,
-        targetType: 'multi',
-        maxTargets: 3,
+        targetType: 'single_splash',    // 단일 대상 + 인접 스플래시
+        maxLevel: 10,
         effects: {
-            damagePercent: 200,
+            damagePercent: 200,          // 1레벨 기준
             statusEffect: 'burn',
-            statusDuration: 2
+            statusDuration: 2,
+            splashSameDamage: true,      // 인접 대상도 동일 피해
+            splashTargets: 'adjacent'    // 양 옆 인접 적
         },
         icon: '🔥'
     },
     // === 도적 스킬 ===
-    slash_combo: {
-        id: 'slash_combo',
+    rapid_slash: {
+        id: 'rapid_slash',
         name: '연속베기',
         description: '적 1명에게 물리공격력의 110%로 2회 공격하고 출혈 상태를 2턴간 부여합니다.',
         type: 'active',
         damageType: 'physical',
-        mpCost: 10,
+        mpCost: 15,
         cooldown: 2,
         targetType: 'single',
+        maxLevel: 10,
         effects: {
-            damagePercent: 110,
+            damagePercent: 110,          // 1레벨 기준
             attackCount: 2,
             statusEffect: 'bleed',
             statusDuration: 2
@@ -1681,20 +1784,22 @@ const SKILLS = {
     spirit_sword: {
         id: 'spirit_sword',
         name: '투지의 검',
-        description: '3턴간 물리공격력 5% 증가 + 물리공격력 +5. 스킬 발동 중 가한 피해의 10% HP 회복. 50% 확률로 턴이 종료되지 않음.',
+        description: '3턴간 물리공격력 5% 증가 + 추가 물리공격력 +10. 발동 턴 동안 직접 가한 피해의 10% HP 회복(상태이상/아이템 피해 제외). 50% 확률로 턴 미종료. 5레벨: 지속시간+1턴, 10레벨: 쿨타임 1턴.',
         type: 'active',
         damageType: 'buff',
         mpCost: 25,
-        cooldown: 2,  // 버프 종료 후 2턴
+        cooldown: 2,               // 버프 종료 후 2턴 (10레벨: 1턴)
         targetType: 'self',
         unlockLevel: 5,
         job: 'warrior',
+        maxLevel: 10,
         effects: {
-            buffDuration: 3,           // 3턴 지속
+            buffDuration: 3,           // 3턴 지속 (5레벨: 4턴)
             pAtkPercent: 5,            // 물리공격력 5% 증가
-            pAtkFlat: 5,               // 물리공격력 +5
+            pAtkFlat: 10,              // 추가 물리공격력 +10
             lifestealPercent: 10,      // 가한 피해 10% HP 회복 (최대HP 초과 불가)
-            noTurnEndChance: 50        // 50% 확률로 턴 미종료
+            noTurnEndChance: 50,       // 50% 확률로 턴 미종료
+            durationFormula: 'getSpiritSwordDuration'
         },
         icon: '🗡️'
     },
@@ -1703,18 +1808,24 @@ const SKILLS = {
     lightning_bolt: {
         id: 'lightning_bolt',
         name: '라이트닝볼트',
-        description: '적 1명에게 마법공격력의 270% 피해를 주고 감전 상태를 1턴간 부여합니다.',
+        description: '선택한 적에게 마법공격력의 270% 피해 + 감전 2중첩. 양 옆 적에게 최초 피해의 40% + 감전 1중첩. 레벨 2 증가마다 추가 랜덤 1명 타격(40% 피해+감전). 최대레벨: 추가 1명 더.',
         type: 'active',
         damageType: 'magical',
         mpCost: 35,
         cooldown: 3,
-        targetType: 'single',
+        targetType: 'single_chain',    // 단일 대상 → 연쇄
         unlockLevel: 5,
         job: 'mage',
+        maxLevel: 10,
         effects: {
-            damagePercent: 270,
+            damagePercent: 270,          // 1레벨 기준 (최초 대상)
             statusEffect: 'shock',
-            statusDuration: 1
+            primaryShockStacks: 2,       // 최초 대상 감전 2중첩
+            secondaryShockStacks: 1,     // 인접/추가 대상 감전 1중첩
+            splashPercent: 40,           // 인접 적 피해 비율(%)
+            splashTargets: 'adjacent',
+            randomBounceFormula: 'getLightningBoltBounces',
+            randomBouncePercent: 40      // 랜덤 타격 피해 비율(%)
         },
         icon: '⚡'
     },
@@ -1723,7 +1834,7 @@ const SKILLS = {
     charge_shot: {
         id: 'charge_shot',
         name: '차지샷',
-        description: '즉시 사용: 200% 피해. 차지 사용: 350% 피해 + 기절 + 인접 2명 50% 피해. 스킬 취소 조건: 피해 40% 초과 시 또는 기절 등 행동 불가 시.',
+        description: '즉시 사용: 200% 피해. 차지(1턴 대기) 사용: 400% 피해 + 기절 + 인접 2명에게 가한 피해의 40% 피해. 차지 중 취소 조건: 받은 누적 피해가 최대HP 40% 초과 또는 행동불능 상태이상.',
         type: 'active',
         damageType: 'physical',
         mpCost: 35,
@@ -1731,14 +1842,17 @@ const SKILLS = {
         targetType: 'single',
         unlockLevel: 5,
         job: 'archer',
+        maxLevel: 10,
         effects: {
             instantDamagePercent: 200,   // 즉시 사용 시 200%
-            chargedDamagePercent: 350,   // 차지 후 350%
+            chargedDamagePercent: 400,   // 차지 후 400% (즉시의 2배)
             statusEffect: 'stun',
-            statusDuration: 1,
-            splashDamagePercent: 50,     // 인접 2명에게 50%
+            chargedStun: true,           // 차지 시에만 기절 적용
+            splashDamagePercent: 40,     // 인접 2명에게 40%
             splashTargets: 2,
-            cancelThreshold: 40          // 최대HP 40% 피해 시 취소
+            cancelThreshold: 40,         // 최대HP 40% 누적 피해 시 취소
+            chargedNoTurnLoss: true,     // 차지 후 자동 사용 시 턴 손실 없음
+            valuesFormula: 'getChargeShotValues'
         },
         icon: '🎯'
     },
@@ -1747,7 +1861,7 @@ const SKILLS = {
     ambush: {
         id: 'ambush',
         name: '기습',
-        description: '적 1명에게 물리공격력의 230% 피해. 적의 물리방어력을 50% 무시합니다.',
+        description: '적 1명에게 물리공격력의 230% 피해. 적의 물리방어력을 50% 무시. 방어력 무시 비율도 레벨에 따라 스케일링.',
         type: 'active',
         damageType: 'physical',
         mpCost: 30,
@@ -1755,11 +1869,280 @@ const SKILLS = {
         targetType: 'single',
         unlockLevel: 5,
         job: 'skirmisher',
+        maxLevel: 10,
         effects: {
-            damagePercent: 230,
-            armorPenetration: 50         // 물리방어력 50% 무시
+            damagePercent: 230,          // 1레벨 기준
+            armorPenetration: 50,        // 1레벨 기준 물리방어력 50% 무시
+            armorPenFormula: 'getAmbushArmorPen'
         },
         icon: '🗡️'
+    },
+
+    // === 적 전용 스킬 ===
+    // 혼란의 저주
+    confusion_curse: {
+        id: 'confusion_curse',
+        name: '혼란의 저주',
+        description: '대상에게 혼란 상태이상을 부여합니다. 모든 회피율을 무시하고 적중하며 저항력으로 막을 수 있습니다.',
+        type: 'active',
+        damageType: 'curse',
+        mpCost: 20,
+        cooldown: 4,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            statusEffect: 'confusion',
+            statusDuration: 2,
+            ignoreEvasion: true,         // 회피율 무시
+            resistible: true             // 저항력으로 방어 가능
+        },
+        icon: '😵'
+    },
+    // 역병의 저주
+    plague_curse: {
+        id: 'plague_curse',
+        name: '역병의 저주',
+        description: '대상에게 역병 상태이상을 부여합니다. 모든 회피율을 무시하고 적중하며 저항력으로 막을 수 있습니다.',
+        type: 'active',
+        damageType: 'curse',
+        mpCost: 40,
+        cooldown: 4,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            statusEffect: 'plague',
+            statusDuration: 3,
+            ignoreEvasion: true,
+            resistible: true
+        },
+        icon: '☠️'
+    },
+    // 약화의 저주
+    weakness_curse: {
+        id: 'weakness_curse',
+        name: '약화의 저주',
+        description: '대상에게 약화 상태이상을 부여합니다. 모든 회피율을 무시하고 적중하며 저항력으로 막을 수 있습니다.',
+        type: 'active',
+        damageType: 'curse',
+        mpCost: 40,
+        cooldown: 4,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            statusEffect: 'weakness',
+            statusDuration: 3,
+            ignoreEvasion: true,
+            resistible: true
+        },
+        icon: '💔'
+    },
+    // 고통의 저주
+    pain_curse: {
+        id: 'pain_curse',
+        name: '고통의 저주',
+        description: '대상에게 고통 상태이상을 부여합니다. 모든 회피율을 무시하고 적중하며 저항력으로 막을 수 있습니다.',
+        type: 'active',
+        damageType: 'curse',
+        mpCost: 50,
+        cooldown: 4,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            statusEffect: 'pain',
+            statusDuration: 3,
+            ignoreEvasion: true,
+            resistible: true
+        },
+        icon: '💀'
+    },
+    // 어둠의 저주
+    darkness_curse: {
+        id: 'darkness_curse',
+        name: '어둠의 저주',
+        description: '대상에게 실명 상태이상을 부여합니다. 모든 회피율을 무시하고 적중하며 저항력으로 막을 수 있습니다.',
+        type: 'active',
+        damageType: 'curse',
+        mpCost: 80,
+        cooldown: 4,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            statusEffect: 'blind',
+            statusDuration: 2,
+            ignoreEvasion: true,
+            resistible: true
+        },
+        icon: '🌑'
+    },
+    // 수호
+    guard: {
+        id: 'guard',
+        name: '수호',
+        description: '자신을 제외한 모든 아군의 받는 피해 50% 감소. 감소분의 75%를 시전자가 대신 받음. 시전자는 공격 불가. 종료 후 받는 피해 2배. 3턴 지속, 4턴 쿨타임.',
+        type: 'active',
+        damageType: 'buff',
+        mpCost: 30,
+        cooldown: 4,
+        targetType: 'self',
+        maxLevel: 10,
+        effects: {
+            buffDuration: 3,
+            allyDamageReduction: 50,     // 아군 받는 피해 50% 감소
+            redirectPercent: 75,         // 감소분의 75%를 시전자가 받음 (25%는 무효화)
+            casterCannotAttack: true,    // 시전자 공격 불가
+            afterEffectDamageTaken: 200  // 종료 후 받는 피해 200%
+        },
+        icon: '🛡️'
+    },
+    // 소환
+    summon: {
+        id: 'summon',
+        name: '소환',
+        description: '해당 맵에서 출현 가능한 몬스터 1~3개체를 소환합니다(보스/전설/에픽 제외).',
+        type: 'active',
+        damageType: 'summon',
+        mpCost: 50,
+        cooldown: 3,
+        targetType: 'none',
+        maxLevel: 10,
+        effects: {
+            summonCountChances: [
+                { count: 1, chance: 50 },
+                { count: 2, chance: 35 },
+                { count: 3, chance: 15 }
+            ],
+            excludeBoss: true,
+            excludeLegendary: true,
+            excludeEpic: true
+        },
+        icon: '📢'
+    },
+    // 거미줄 속박
+    web_bind: {
+        id: 'web_bind',
+        name: '거미줄 속박',
+        description: '대상에게 물리공격력의 100% 물리피해를 주고 속박 상태이상을 부여합니다.',
+        type: 'active',
+        damageType: 'physical',
+        mpCost: 20,
+        cooldown: 3,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            damagePercent: 100,
+            statusEffect: 'bind',
+            statusDuration: 2
+        },
+        icon: '🕸️'
+    },
+    // 뼈투척
+    bone_throw: {
+        id: 'bone_throw',
+        name: '뼈투척',
+        description: '현재 HP의 15%를 소모하여, 물리/마법 공격력 중 높은 쪽의 150% 마법피해를 줍니다. HP 10% 이상 필요.',
+        type: 'active',
+        damageType: 'magical',
+        mpCost: 0,
+        cooldown: 2,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            hpCostPercent: 15,           // 현재 HP의 15% 소모
+            hpMinRequired: 10,           // 최소 HP 10% 이상 필요
+            damagePercent: 150,          // 높은 공격력의 150%
+            useHigherAtk: true           // 물리/마법 중 높은 공격력 사용
+        },
+        icon: '🦴'
+    },
+    // 살점폭파
+    flesh_explosion: {
+        id: 'flesh_explosion',
+        name: '살점폭파',
+        description: '현재 HP의 20%를 소모하여, 물리/마법 중 높은 공격력의 80% + 소모HP의 50% 마법피해. 쿨타임 중 공격력 20% 감소. HP 10% 이상 필요.',
+        type: 'active',
+        damageType: 'magical',
+        mpCost: 0,
+        cooldown: 3,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            hpCostPercent: 20,
+            hpMinRequired: 10,
+            damagePercent: 80,
+            useHigherAtk: true,
+            bonusHpCostDamagePercent: 50, // 소모HP의 50% 추가 피해
+            cooldownDebuff: { atkReduction: 20 } // 쿨타임 중 공격력 20% 감소
+        },
+        icon: '💥'
+    },
+    // 멸망의 일격
+    doom_strike: {
+        id: 'doom_strike',
+        name: '멸망의 일격',
+        description: '전투 5턴 경과 또는 HP 50% 이하 시 사용 가능. 물리공격력 300% + 마법공격력 200% + 잃은HP 25% 피해(물리70%:마법30%). 기절 부여 후 50%+시전자정확도% 확률로 혼란 1턴 추가.',
+        type: 'active',
+        damageType: 'mixed',         // 혼합 피해
+        mpCost: 50,
+        cooldown: 5,
+        targetType: 'single',
+        maxLevel: 10,
+        effects: {
+            pAtkPercent: 300,           // 물리공격력의 300%
+            mAtkPercent: 200,           // 마법공격력의 200%
+            lostHpPercent: 25,          // 잃은 HP의 25%
+            physicalRatio: 70,          // 총 피해의 70%가 물리
+            magicalRatio: 30,           // 총 피해의 30%가 마법
+            statusEffect: 'stun',
+            statusDuration: 1,
+            afterStunEffect: 'confusion',
+            afterStunChance: 50,        // 기본 50% + 시전자 정확도%
+            afterStunDuration: 1,
+            activationCondition: {
+                turnThreshold: 5,        // 전투 5턴 이후
+                hpThreshold: 50          // 또는 HP 50% 이하
+            }
+        },
+        icon: '☠️'
+    },
+    // 포효(스킬)
+    roar: {
+        id: 'roar',
+        name: '포효',
+        description: '모든 적에게 도발효과를 적용하고 물리 및 마법 공격력을 10% 증가시킵니다.',
+        type: 'active',
+        damageType: 'buff',
+        mpCost: 20,
+        cooldown: 4,
+        targetType: 'self',
+        maxLevel: 10,
+        effects: {
+            tauntAll: true,              // 모든 적에게 도발
+            pAtkPercent: 10,             // 물리공격력 10% 증가
+            mAtkPercent: 10,             // 마법공격력 10% 증가
+            buffDuration: 3
+        },
+        icon: '🦁'
+    },
+    // 대지강타
+    earth_smash: {
+        id: 'earth_smash',
+        name: '대지강타',
+        description: '대상에게 물리공격력의 300% 피해 + 혼란 2턴. 인접 적에게 피해의 30% + 혼란 1턴.',
+        type: 'active',
+        damageType: 'physical',
+        mpCost: 50,
+        cooldown: 4,
+        targetType: 'single_splash',
+        maxLevel: 10,
+        effects: {
+            damagePercent: 300,
+            statusEffect: 'confusion',
+            statusDuration: 2,
+            splashPercent: 30,           // 인접 적에게 피해량의 30%
+            splashStatusDuration: 1,     // 인접 적 혼란 1턴
+            splashTargets: 'adjacent'
+        },
+        icon: '🌍'
     }
 };
 
@@ -2475,7 +2858,8 @@ const MONSTERS = {
         exp: 180, gold: 60,
         drops: [
             { item: 'strange_bone', chance: 0.5 },
-            { item: 'cursed_bone', chance: 0.2 }
+            { item: 'cursed_bone', chance: 0.2 },
+            { item: 'shining_bone', chance: 0.15 }
         ],
         emoji: '💀',
         description: '일반 스켈레톤보다 강함'
