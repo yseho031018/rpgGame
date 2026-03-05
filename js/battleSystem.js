@@ -310,7 +310,8 @@ function createBattleMonster(monsterType) {
         template.possibleTraits.forEach(traitDef => {
             const roll = Math.random();
             if (roll < traitDef.chance) {
-                activeTraits.push(traitDef.id);
+                // 레벨 정보 포함하여 저장
+                activeTraits.push({ id: traitDef.id, level: traitDef.level || 1 });
             }
         });
     }
@@ -1392,6 +1393,44 @@ function processMonsterStatusEffects(monster) {
                 addGameLog(`💫 ${getMonsterNameWithColor(monster)}은(는) 기절 상태! 행동 불가!`);
                 monster._stunned = true; // 턴 스킵 플래그
                 break;
+
+            case 'madness': // 광기: 공격력 상승하지만 자해 피해
+                const madnessDmg = Math.max(1, Math.round(monster.maxHp * 0.05));
+                monster.hp -= madnessDmg;
+                // 공격력 20% 버프는 calculateMonsterDamage에서 처리
+                addGameLog(`🌀 ${getMonsterNameWithColor(monster)}이(가) 광기로 자해! ${madnessDmg} 피해! (공격력 상승 중)`);
+                break;
+
+            case 'bind': // 속박: 행동 불가 (기절과 유사하지만 피해 없음)
+                addGameLog(`🕸️ ${getMonsterNameWithColor(monster)}은(는) 속박 상태! 행동 불가!`);
+                monster._stunned = true;
+                break;
+
+            case 'blind': // 실명: 명중률 감소 (공격 시 적용)
+                addGameLog(`🌑 ${getMonsterNameWithColor(monster)}은(는) 실명 상태! 명중률 감소!`);
+                break;
+
+            case 'plague': // 역병: 최대HP의 6% 피해 + 방어력 감소
+                damage = Math.max(1, Math.round(monster.maxHp * 0.06));
+                monster.hp -= damage;
+                addGameLog(`☠️ ${getMonsterNameWithColor(monster)}이(가) 역병으로 ${damage} 피해! (방어력 감소 중)`);
+                break;
+
+            case 'pain': // 고통: 매 턴 고정 피해
+                damage = Math.max(1, Math.round(monster.maxHp * 0.04));
+                monster.hp -= damage;
+                addGameLog(`💢 ${getMonsterNameWithColor(monster)}이(가) 고통으로 ${damage} 피해!`);
+                break;
+
+            case 'weakness': // 약화: 공격력/방어력 감소 (calculateMonsterDamage에서 처리)
+                addGameLog(`⬇️ ${getMonsterNameWithColor(monster)}은(는) 약화 상태! 공격력/방어력 감소!`);
+                break;
+
+            case 'infection': // 감염: 지속 피해 + 회복량 감소
+                damage = Math.max(1, Math.round(monster.maxHp * 0.03));
+                monster.hp -= damage;
+                addGameLog(`🦠 ${getMonsterNameWithColor(monster)}이(가) 감염으로 ${damage} 피해!`);
+                break;
         }
 
         // 지속시간 감소
@@ -1665,12 +1704,31 @@ function doMonsterTurn() {
             return;
         }
         
-        // 자가수복 특성 처리: 매 턴당 최대HP의 3% 회복
-        if (monster.traits && monster.traits.includes('self_repair') && monster.hp < monster.maxHp) {
-            const healAmount = Math.floor(monster.maxHp * 0.03);
+        // 자가수복 특성 처리: 매 턴당 최대HP의 3% 회복 (레벨당 스케일)
+        const selfRepairTrait = getMonsterTrait(monster, 'self_repair');
+        if (selfRepairTrait.has && monster.hp < monster.maxHp) {
+            const basePercent = 3;
+            const scaledPercent = typeof getScaledValue === 'function' 
+                ? getScaledValue(basePercent, selfRepairTrait.level) 
+                : basePercent;
+            const healAmount = Math.floor(monster.maxHp * (scaledPercent / 100));
             const actualHeal = Math.min(healAmount, monster.maxHp - monster.hp);
             monster.hp += actualHeal;
             addGameLog(`🔧 ${monster.name}의 자가수복! HP +${actualHeal} 회복!`);
+            updateBattleUI();
+        }
+        
+        // 재생 특성 처리: 매 턴당 최대HP의 3% 회복
+        const regenTrait = getMonsterTrait(monster, 'regeneration');
+        if (regenTrait.has && monster.hp < monster.maxHp) {
+            const basePercent = 3;
+            const scaledPercent = typeof getScaledValue === 'function' 
+                ? getScaledValue(basePercent, regenTrait.level) 
+                : basePercent;
+            const healAmount = Math.floor(monster.maxHp * (scaledPercent / 100));
+            const actualHeal = Math.min(healAmount, monster.maxHp - monster.hp);
+            monster.hp += actualHeal;
+            addGameLog(`💚 ${monster.name}의 재생! HP +${actualHeal} 회복!`);
             updateBattleUI();
         }
         
@@ -1681,7 +1739,8 @@ function doMonsterTurn() {
             monster.currentMp = Math.min(monster.currentMp + mpRegen, monster.maxMp || 0);
             
             // 대련 몬스터 특성 처리: 신속 (swift) - 첫 턴 2회 행동
-            if (monster.trait === 'swift') {
+            const sparTrait = getSparMonsterTrait(monster);
+            if (sparTrait.id === 'swift') {
                 if (!monster.traitState) monster.traitState = {};
                 
                 // 첫 턴(또는 10턴 쿨타임 후)에 2회 행동
@@ -1702,7 +1761,7 @@ function doMonsterTurn() {
             }
             
             // 대련 몬스터 특성 처리: 명상 (meditation) - 매 턴 MP 2% 추가 회복
-            if (monster.trait === 'meditation') {
+            if (sparTrait.id === 'meditation') {
                 const meditationRegen = Math.ceil((monster.maxMp || 0) * 0.02);
                 monster.currentMp = Math.min(monster.currentMp + meditationRegen, monster.maxMp || 0);
                 if (meditationRegen > 0) {
@@ -1959,7 +2018,10 @@ function tryUseSparSkill(monster) {
     // 사용 가능한 스킬 찾기 (MP, 쿨타임 체크)
     const availableSkills = [];
     
-    monster.skills.forEach(skillId => {
+    monster.skills.forEach(skillEntry => {
+        // 새 형식: { skillRef: 'multishot', level: 3 } 또는 레거시 문자열 형식 지원
+        const skillId = typeof skillEntry === 'string' ? skillEntry : (skillEntry.skillRef || skillEntry);
+        const skillLevel = typeof skillEntry === 'object' ? (skillEntry.level || 1) : 1;
         const skill = SKILLS ? SKILLS[skillId] : null;
         if (!skill) return;
         
@@ -1970,14 +2032,19 @@ function tryUseSparSkill(monster) {
         const mpCost = skill.mpCost || 0;
         if ((monster.currentMp || 0) < mpCost) return;
         
-        availableSkills.push({ skillId, skill });
+        availableSkills.push({ skillId, skill, skillLevel });
     });
     
     if (availableSkills.length === 0) return false;
     
     // 랜덤 스킬 선택
     const selected = availableSkills[Math.floor(Math.random() * availableSkills.length)];
-    const { skillId, skill } = selected;
+    const { skillId, skill, skillLevel } = selected;
+    
+    // 스킬 레벨 배율 계산
+    const levelMultiplier = typeof getSkillLevelMultiplier === 'function' 
+        ? getSkillLevelMultiplier(skillLevel) 
+        : 1.0;
     
     // MP 소모
     monster.currentMp -= (skill.mpCost || 0);
@@ -2013,7 +2080,7 @@ function tryUseSparSkill(monster) {
     // 데미지형 스킬 처리
     const damageType = skill.damageType || monster.damageType || 'physical';
     const atk = damageType === 'magical' ? (monster.mAtk || 20) : (monster.pAtk || monster.atk || 20);
-    const damageMultiplier = skill.damageMultiplier || 1.5;
+    const damageMultiplier = (skill.damageMultiplier || 1.5) * levelMultiplier;
     const baseDamage = Math.floor(atk * damageMultiplier);
     
     // 회피 체크
@@ -2097,6 +2164,48 @@ function executeSparDefend(monster) {
 // ============================================
 // 🌟 특성 시스템
 // ============================================
+
+/**
+ * 몬스터가 특정 특성을 보유하고 있는지 확인합니다.
+ * 레거시(문자열 배열)와 새 형식(객체 배열) 모두 지원합니다.
+ * @param {Object} monster - 몬스터 객체
+ * @param {string} traitId - 확인할 특성 ID
+ * @returns {{ has: boolean, level: number }} - 보유 여부와 레벨
+ */
+function getMonsterTrait(monster, traitId) {
+    if (!monster.traits || !Array.isArray(monster.traits)) return { has: false, level: 0 };
+    
+    for (const trait of monster.traits) {
+        if (typeof trait === 'string') {
+            if (trait === traitId) return { has: true, level: 1 };
+        } else if (trait && trait.id === traitId) {
+            return { has: true, level: trait.level || 1 };
+        }
+    }
+    return { has: false, level: 0 };
+}
+
+/**
+ * 몬스터가 특정 특성을 보유하고 있는지 간단히 확인합니다.
+ * @param {Object} monster - 몬스터 객체
+ * @param {string} traitId - 확인할 특성 ID
+ * @returns {boolean} - 보유 여부
+ */
+function hasMonsterTrait(monster, traitId) {
+    return getMonsterTrait(monster, traitId).has;
+}
+
+/**
+ * 대련 몬스터의 특성 ID를 가져옵니다.
+ * 레거시(문자열)와 새 형식(객체) 모두 지원합니다.
+ * @param {Object} monster - 몬스터 객체
+ * @returns {{ id: string|null, level: number }}
+ */
+function getSparMonsterTrait(monster) {
+    if (!monster.trait) return { id: null, level: 0 };
+    if (typeof monster.trait === 'string') return { id: monster.trait, level: 1 };
+    return { id: monster.trait.id, level: monster.trait.level || 1 };
+}
 
 /**
  * 턴 시작 시 특성 효과를 처리합니다.
@@ -2347,26 +2456,53 @@ function calculateMonsterDamage(monster, target, damageType = 'physical') {
     const type = monster.damageType || damageType;
 
     // 몬스터 공격력
-    const monsterAtk = type === 'magical' ?
+    let monsterAtk = type === 'magical' ?
         (monster.mAtk || monster.atk || 10) :
         (monster.pAtk || monster.atk || 10);
 
     // 플레이어 방어력
-    const targetDef = type === 'magical' ?
+    let targetDef = type === 'magical' ?
         (target.mDef || 0) + (target.bonusMDef || 0) :
         (target.pDef || 0) + (target.bonusPDef || 0);
+
+    // 약화 상태 체크 - 공격력/방어력 20% 감소 (몬스터의 공격력)
+    const monsterId = monster.statusEffectId || 
+        (monster.battleIndex !== undefined ? `monster_${monster.battleIndex}` : monster.name);
+    const monsterEffects = battleState.monsterStatusEffects?.[monsterId];
+    
+    if (monsterEffects?.weakness?.duration > 0) {
+        monsterAtk = Math.floor(monsterAtk * 0.8);
+    }
+    
+    // 역병 상태 체크 - 방어력 20% 감소 (몬스터의 방어력 감소)
+    if (monsterEffects?.plague?.duration > 0) {
+        // 역병은 몬스터 자체의 방어 감소라 여기서는 공격에만 영향
+    }
 
     // 혼란 상태 체크 - 피해 배수 감소
     const isConfused = checkMonsterConfusion(monster);
     
+    // 실명 상태 체크 - 30% 확률로 빗나감
+    if (monsterEffects?.blind?.duration > 0) {
+        if (Math.random() < 0.3) {
+            addGameLog(`🌑 ${monster.name}의 공격이 실명으로 빗나갔다!`);
+            return 0;
+        }
+    }
+    
     let multiplier;
     if (isConfused) {
-        // 혼란 상태: 0.5~1.5배 (기본 0.6~2.0에서 최솟값 -0.1, 최댓값 -0.5)
+        // 혼란 상태: 0.5~1.5배
         multiplier = 0.5 + Math.random() * 1.0;
         addGameLog(`😵 ${monster.name}은(는) 혼란으로 공격력이 감소!`);
     } else {
         // 정상 상태: 0.6~2.0배
         multiplier = 0.6 + Math.random() * 1.4;
+    }
+    
+    // 광기 상태 - 공격력 20% 증가
+    if (monsterEffects?.madness?.duration > 0) {
+        monsterAtk = Math.floor(monsterAtk * 1.2);
     }
     
     let damage = Math.round(monsterAtk * multiplier);

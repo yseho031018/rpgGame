@@ -2154,52 +2154,165 @@ const STATUS_EFFECTS = {
     confusion: {
         id: 'confusion',
         name: '혼란',
-        description: '다음 공격의 배수 범위가 감소합니다.',
+        description: '일반공격 배수 최대치 -0.5배, 최소치 -0.1배. 스킬 배수 최대치 -0.3배, 최소치 -0.1배.',
         icon: '😵',
+        hasLevel: true,
+        maxLevel: 10,
         effects: {
-            maxMultiplierReduction: 0.5,  // 최대 배수 -0.5
-            minMultiplierReduction: 0.1   // 최소 배수 -0.1
+            normalMaxMultiplierReduction: 0.5,  // 일반공격 최대 배수 -0.5
+            normalMinMultiplierReduction: 0.1,  // 일반공격 최소 배수 -0.1
+            skillMaxMultiplierReduction: 0.3,   // 스킬 최대 배수 -0.3
+            skillMinMultiplierReduction: 0.1    // 스킬 최소 배수 -0.1
         }
     },
     burn: {
         id: 'burn',
         name: '화상',
-        description: '턴마다 받은 피해의 20%만큼 마법 피해를 입습니다.',
+        description: '턴마다 화상을 부여한 스킬 피해량의 20%만큼 마법 피해. 마법방어력과 특성으로 감소 가능.',
         icon: '🔥',
+        hasLevel: true,
+        maxLevel: 10,
         effects: {
-            damagePercent: 20,  // 스킬 피해의 20%
-            damageType: 'magical'
+            damagePercent: 20,       // 스킬 피해의 20%
+            damageType: 'magical',
+            reducibleByMDef: true,   // 마법방어력으로 감소 가능
+            reducibleByTrait: true   // 특성으로 감소 가능
         }
     },
     bleed: {
         id: 'bleed',
         name: '출혈',
-        description: '턴마다 최대HP의 4%만큼 물리 피해를 입습니다. (방어 불가)',
+        description: '턴마다 최대HP의 4%만큼 물리 피해. 물리방어력으로 감소 불가, 특성으로만 감소 가능.',
         icon: '🩸',
+        hasLevel: true,
+        maxLevel: 10,
         effects: {
-            hpPercent: 4,       // 최대HP의 4%
-            ignoreDefense: true // 방어력 무시
+            hpPercent: 4,            // 최대HP의 4%
+            damageType: 'physical',
+            ignoreDefense: true,     // 물리방어력으로 감소 불가
+            reducibleByTrait: true   // 특성으로 감소 가능
         }
     },
     shock: {
         id: 'shock',
         name: '감전',
-        description: '적 턴에 받은 피해량의 15% 마법 피해. 인접 2명에게 절반 피해.',
+        description: '감전 부여 스킬 피해의 15% 마법피해. 인접 적에게 절반 피해. 중첩 가능(중첩마다 레벨+1). 10레벨 초과 시 레벨당 10% 피해 보너스로 치환. 중첩 수만큼 피해 적용.',
         icon: '⚡',
+        hasLevel: true,
+        maxLevel: 10,
+        stackable: true,             // 중첩 가능
         effects: {
-            damagePercent: 15,      // 받은 피해의 15%
+            damagePercent: 15,       // 감전 부여 스킬 피해의 15%
             damageType: 'magical',
-            splashPercent: 50,      // 인접 2명에게 절반
-            splashTargets: 2
+            splashPercent: 50,       // 인접 적에게 절반
+            splashTargets: 'adjacent',
+            overflowBonusPerLevel: 10  // 10레벨 초과 시 레벨당 10% 보너스
         }
     },
     stun: {
         id: 'stun',
         name: '기절',
-        description: '해당 턴 행동이 불가능합니다.',
+        description: '기절에 걸린 대상의 턴에서 한 번의 행동을 할 수 없게 됩니다. 레벨 없음.',
         icon: '💫',
+        hasLevel: false,
         effects: {
-            skipTurn: true          // 턴 스킵
+            reduceAction: 1          // 행동 횟수 1 감소
+        }
+    },
+    madness: {
+        id: 'madness',
+        name: '광기',
+        description: '공격성공률 40% 감소 (정확도 1%당 1% 감소효과 제거). 물리/마법 공격력 중 높은 쪽 30% 증가.',
+        icon: '🤪',
+        hasLevel: true,
+        maxLevel: 10,
+        effects: {
+            hitRateReduction: 40,       // 공격성공률 40% 감소
+            hitRatePerAccuracy: 1,      // 정확도 1%당 1% 감소 제거
+            higherAtkBonus: 30          // 높은 공격력 30% 증가
+        }
+    },
+    bind: {
+        id: 'bind',
+        name: '속박',
+        description: '회피율 50% 감소. (예: 회피율 30% → 15%)',
+        icon: '🕸️',
+        hasLevel: true,
+        maxLevel: 10,
+        effects: {
+            evasionReduction: 50        // 회피율 50% 감소
+        }
+    },
+    blind: {
+        id: 'blind',
+        name: '실명',
+        description: '공격성공률 50% 감소(정확도 1%당 1% 감소 제거). 일반/스킬 공격 배수 최대치 -0.5배.',
+        icon: '🌑',
+        hasLevel: true,
+        maxLevel: 10,
+        effects: {
+            hitRateReduction: 50,       // 공격성공률 50% 감소
+            hitRatePerAccuracy: 1,      // 정확도 1%당 1% 감소 제거
+            maxMultiplierReduction: 0.5  // 공격 배수 최대치 -0.5
+        }
+    },
+    plague: {
+        id: 'plague',
+        name: '역병',
+        description: '턴마다 최대HP의 3% 마법피해(마법방어 감소 불가, 특성으로만 감소). 매 턴 인접 적에게 2턴간 전염. 이미 걸렸던 대상에겐 재전염 불가(새 저주 제외).',
+        icon: '☠️',
+        hasLevel: true,
+        maxLevel: 10,
+        effects: {
+            hpPercent: 3,               // 최대HP의 3%
+            damageType: 'magical',
+            ignoreDefense: true,        // 마법방어로 감소 불가
+            reducibleByTrait: true,     // 특성으로만 감소 가능
+            spreadToAdjacent: true,     // 인접 적에게 전염
+            spreadDuration: 2,          // 전염 시 2턴 부여
+            immuneAfterCured: true      // 같은 역병은 재전염 불가
+        }
+    },
+    pain: {
+        id: 'pain',
+        name: '고통',
+        description: '턴마다 최대HP의 3% 마법피해(마법방어 감소 불가, 특성으로만 감소). 턴마다 피해 10% 증가. 받는 피해 20% 증가.',
+        icon: '😣',
+        hasLevel: true,
+        maxLevel: 10,
+        effects: {
+            hpPercent: 3,               // 최대HP의 3%
+            damageType: 'magical',
+            ignoreDefense: true,
+            reducibleByTrait: true,
+            damageEscalation: 10,       // 턴마다 피해 10% 증가
+            damageTakenIncrease: 20     // 받는 피해 20% 증가
+        }
+    },
+    weakness: {
+        id: 'weakness',
+        name: '약화',
+        description: '물리/마법 방어력 30% + 5 감소. 고정피해를 제외한 모든 피해량 25% 감소.',
+        icon: '💔',
+        hasLevel: true,
+        maxLevel: 10,
+        effects: {
+            defReductionPercent: 30,    // 방어력 30% 감소
+            defReductionFlat: 5,        // 방어력 5 추가 감소
+            damageDealtReduction: 25    // 가하는 피해 25% 감소 (고정피해 제외)
+        }
+    },
+    infection: {
+        id: 'infection',
+        name: '감염',
+        description: '감염 특성을 가진 개체의 공격에 성공할 경우 부여되는 상태이상.',
+        icon: '🦠',
+        hasLevel: true,
+        maxLevel: 10,
+        effects: {
+            hpPercent: 2,               // 턴당 최대HP의 2% 피해
+            damageType: 'magical',
+            reducibleByTrait: true
         }
     }
 };
@@ -2213,15 +2326,17 @@ const TRAITS = {
     unyielding: {
         id: 'unyielding',
         name: '불굴',
-        description: 'HP가 30% 이하일 때 자동 발동. 받는 피해 10% 감소, 가하는 피해 10% 증가. 4턴 지속, 효과 종료 후 5턴 쿨타임.',
+        description: 'HP가 30% 이하일 때 자동 발동. 받는 피해 20% 감소, 가하는 피해 20% 증가. 4턴 지속. 재적용 쿨타임 4턴. 5레벨: 쿨타임 -1턴, 10레벨: 쿨타임 추가 -1턴.',
         job: 'warrior',
         icon: '🔥',
+        maxLevel: 10,
         effects: {
             hpThreshold: 30,           // HP 30% 이하일 때 발동
-            damageReduction: 10,       // 받는 피해 10% 감소
-            damageBonus: 10,           // 가하는 피해 10% 증가
+            damageReduction: 20,       // 받는 피해 20% 감소
+            damageBonus: 20,           // 가하는 피해 20% 증가
             duration: 4,               // 4턴 지속
-            cooldown: 5                // 효과 종료 후 5턴 쿨타임
+            cooldown: 4                // 재적용 쿨타임 4턴
+            // 5레벨: 쿨타임 3턴, 10레벨: 쿨타임 2턴
         }
     },
 
@@ -2232,6 +2347,7 @@ const TRAITS = {
         description: '매 턴당 최대 MP의 2%를 회복합니다. 최대 MP를 초과할 수 없습니다.',
         job: 'mage',
         icon: '🧘',
+        maxLevel: 10,
         effects: {
             mpRegenPercent: 2          // 매 턴 MP 2% 회복
         }
@@ -2241,9 +2357,10 @@ const TRAITS = {
     hawks_eye: {
         id: 'hawks_eye',
         name: '매의 눈',
-        description: '공격 시 상대의 회피율을 30% 무시합니다.',
+        description: '공격 시 상대의 회피율을 30% 무시합니다. 정확도는 특성 적용 후 적용.',
         job: 'archer',
         icon: '👁️',
+        maxLevel: 10,
         effects: {
             evasionPenetration: 30     // 상대 회피율 30% 무시
         }
@@ -2253,12 +2370,140 @@ const TRAITS = {
     swift: {
         id: 'swift',
         name: '신속',
-        description: '전투 첫 턴에 두 번 행동할 수 있습니다. 10턴마다 재사용 가능.',
+        description: '전투 첫 턴에 두 번 행동 가능. 10턴 쿨타임. 6레벨: 5턴, 최대레벨: 매턴 2회 행동.',
         job: 'skirmisher',
         icon: '💨',
+        maxLevel: 10,
         effects: {
             doubleActionFirstTurn: true,   // 첫 턴 2회 행동
             cooldown: 10                   // 10턴 쿨다운
+        }
+    },
+
+    // === 적 전용 특성 ===
+    tough_body: {
+        id: 'tough_body',
+        name: '강인한 육체',
+        description: '받는 피해량 15% 감소. 저항력과 회복효율 15% 상승.',
+        icon: '💪',
+        maxLevel: 10,
+        effects: {
+            damageReduction: 15,       // 받는 피해 15% 감소
+            resistanceBonus: 15,       // 저항력 15% 상승
+            healEffBonus: 15           // 회복효율 15% 상승
+        }
+    },
+    iron_skin: {
+        id: 'iron_skin',
+        name: '아이언 스킨',
+        description: '적의 물리공격을 10% 확률로 무시할 수 있습니다.',
+        icon: '🛡️',
+        maxLevel: 10,
+        effects: {
+            physicalBlockChance: 10    // 물리공격 10% 확률 무시
+        }
+    },
+    self_repair: {
+        id: 'self_repair',
+        name: '자가수복',
+        description: '매 턴당 최대HP의 3%만큼 HP를 회복합니다. HP 최대치 초과 불가.',
+        icon: '🔧',
+        maxLevel: 10,
+        effects: {
+            hpRegenPercent: 3          // 매 턴 HP 3% 회복
+        }
+    },
+    spirit_body: {
+        id: 'spirit_body',
+        name: '영체',
+        description: '물리피해를 받을 경우 원래 물리피해량의 50% 감소한 피해만 받습니다.',
+        icon: '👻',
+        maxLevel: 10,
+        effects: {
+            physicalDamageReduction: 50  // 물리피해 50% 감소
+        }
+    },
+    summon_call: {
+        id: 'summon_call',
+        name: '호출',
+        description: '전투 시작 5턴동안 죽지 않을 시 해당 지역 몬스터 1~3개체 소환(1개체60%,2개체30%,3개체10%). 보스/강력한 몹 제외.',
+        icon: '📢',
+        maxLevel: 10,
+        effects: {
+            triggerTurn: 5,               // 5턴 후 발동
+            summonCountChances: [
+                { count: 1, chance: 60 },
+                { count: 2, chance: 30 },
+                { count: 3, chance: 10 }
+            ],
+            excludeBoss: true,
+            excludeStrong: true
+        }
+    },
+    infection_trait: {
+        id: 'infection_trait',
+        name: '감염',
+        description: '이 특성의 개체가 공격 성공 시, 대상에게 감염 상태이상을 부여합니다.',
+        icon: '🦠',
+        maxLevel: 10,
+        effects: {
+            onHitStatusEffect: 'infection',
+            statusDuration: 3
+        }
+    },
+    rage: {
+        id: 'rage',
+        name: '분노',
+        description: '공격받을 때마다, 해당 공격 타입에 따라 물리 또는 마법 공격력이 5 증가합니다.',
+        icon: '😡',
+        maxLevel: 10,
+        effects: {
+            atkGainOnHit: 5            // 공격받을 시 해당 타입 공격력 +5
+        }
+    },
+    split: {
+        id: 'split',
+        name: '분열',
+        description: '처치 시 작은 타입 몬스터 2개체 등장. 능력치는 처치된 몬스터의 15%.',
+        icon: '🟢',
+        maxLevel: 10,
+        effects: {
+            spawnCount: 2,             // 2개체 등장
+            statPercent: 15            // 원본의 15% 능력치
+        }
+    },
+    counter: {
+        id: 'counter',
+        name: '반격',
+        description: '공격받을 시 25% 확률로 발동. 받은 피해의 10% HP 회복. 높은 공격력의 75% + 받은 피해의 20%로 반격.',
+        icon: '⚔️',
+        maxLevel: 10,
+        effects: {
+            triggerChance: 25,         // 25% 확률 발동
+            healPercent: 10,           // 받은 피해의 10% HP 회복
+            counterAtkPercent: 75,     // 높은 공격력의 75%
+            counterDamageBonusPercent: 20  // 받은 피해의 20% 추가 피해
+        }
+    },
+    regeneration: {
+        id: 'regeneration',
+        name: '재생',
+        description: '매 턴당 최대HP의 5%만큼 HP를 회복합니다. HP 최대치 초과 불가.',
+        icon: '💚',
+        maxLevel: 10,
+        effects: {
+            hpRegenPercent: 5          // 매 턴 HP 5% 회복
+        }
+    },
+    rabies: {
+        id: 'rabies',
+        name: '광견병',
+        description: '이 특성의 개체가 공격 성공 시, 대상에게 광기 상태이상을 부여합니다.',
+        icon: '🐕',
+        maxLevel: 10,
+        effects: {
+            onHitStatusEffect: 'madness',
+            statusDuration: 2
         }
     }
 };
@@ -2365,10 +2610,10 @@ const MONSTERS = {
         emoji: '🗿',
         image: 'assets/monsters/training_golem.jpg',
         // 5% 확률로 자가수복 특성 보유
-        possibleTraits: [{ id: 'self_repair', chance: 0.05 }]
+        possibleTraits: [{ id: 'self_repair', chance: 0.05, level: 1 }]
     },
 
-    // ===== 대련 교관 몬스터 =====
+    // ===== 대련 교관 몬스터 (레거시 - 아래 SPAR 섹션의 정의가 이 정의를 덮어씁니다) =====
     // 초급훈련장 - 훈련교관2 (궁수)
     spar_instructor2: {
         id: 'spar_instructor2',
@@ -2382,7 +2627,12 @@ const MONSTERS = {
         drops: [],
         emoji: '🏹',
         isSpar: true,
-        skills: ['arrow_shot', 'double_shot'],
+        sparClass: 'archer',
+        trait: { id: 'hawks_eye', level: 3 },
+        skills: [
+            { skillRef: 'multishot', level: 3 },
+            { skillRef: 'charge_shot', level: 3 }
+        ],
         aiPattern: { attack: 60, skill: 30, defend: 10, mpRegenPercent: 3 },
         dialogues: { start: '내 실력을 시험해보고 싶은가? 좋아, 덤벼라!' },
         image: 'assets/monsters/spar_instructor2.jpg'
@@ -2400,7 +2650,12 @@ const MONSTERS = {
         drops: [],
         emoji: '🔮',
         isSpar: true,
-        skills: ['fire_bolt', 'ice_bolt'],
+        sparClass: 'mage',
+        trait: { id: 'meditation', level: 4 },
+        skills: [
+            { skillRef: 'fireball', level: 4 },
+            { skillRef: 'lightning_bolt', level: 4 }
+        ],
         aiPattern: { attack: 60, skill: 30, defend: 10, mpRegenPercent: 3 },
         dialogues: { start: '마법의 위력을 보여주지.' },
         image: 'assets/monsters/spar_instructor3.jpg'
@@ -2418,7 +2673,12 @@ const MONSTERS = {
         drops: [],
         emoji: '🗡️',
         isSpar: true,
-        skills: ['backstab', 'shadow_step'],
+        sparClass: 'skirmisher',
+        trait: { id: 'swift', level: 5 },
+        skills: [
+            { skillRef: 'rapid_slash', level: 5 },
+            { skillRef: 'ambush', level: 5 }
+        ],
         aiPattern: { attack: 60, skill: 30, defend: 10, mpRegenPercent: 3 },
         dialogues: { start: '내 속도를 따라올 수 있겠나?' },
         image: 'assets/monsters/spar_instructor4.jpg'
@@ -2436,7 +2696,12 @@ const MONSTERS = {
         drops: [],
         emoji: '⚔️',
         isSpar: true,
-        skills: ['power_strike', 'shield_bash'],
+        sparClass: 'warrior',
+        trait: { id: 'unyielding', level: 6 },
+        skills: [
+            { skillRef: 'smash', level: 6 },
+            { skillRef: 'spirit_sword', level: 6 }
+        ],
         aiPattern: { attack: 60, skill: 30, defend: 10, mpRegenPercent: 3 },
         dialogues: { 
             start: '자네 강하구만, 이제부터 진심으로 상대해주지.',
@@ -2482,14 +2747,16 @@ const MONSTERS = {
         emoji: '👻',
         description: '회피율이 높고, 마법 공격으로 상대하는것이 좋다.',
         skills: [{
-            id: 'confusion_curse_1',
-            name: '혼란의 저주 Lv.1',
-            cooldown: 3,
+            id: 'confusion_curse',
+            name: '혼란의 저주',
+            skillRef: 'confusion_curse',
+            level: 1,
+            cooldown: 4,
             description: '대상에게 혼란 상태를 부여한다.',
-            effect: { type: 'status', statusEffect: 'confusion', statusDuration: 2 }
+            effect: { type: 'curse', statusEffect: 'confusion', statusDuration: 2, ignoreEvasion: true, resistible: true }
         }],
         possibleTraits: [
-            { id: 'spirit_body_1', chance: 1.0 }
+            { id: 'spirit_body', chance: 1.0, level: 1 }
         ]
     },
     rat: {
@@ -2525,11 +2792,13 @@ const MONSTERS = {
         emoji: '🗡️',
         description: '마을을 약탈하는 도적이다. 특별한 아이템을 얻을 수도?',
         skills: [{
-            id: 'slash_combo_1',
-            name: '연속베기 Lv.1',
+            id: 'rapid_slash',
+            name: '연속베기',
+            skillRef: 'rapid_slash',
+            level: 1,
             cooldown: 2,
             description: '적에게 연속으로 2회 베기 공격을 한다.',
-            effect: { type: 'multi_attack', attackCount: 2, damagePercent: 110 }
+            effect: { type: 'multi_attack', attackCount: 2, damagePercent: 110, statusEffect: 'bleed', statusDuration: 2 }
         }]
     },
     infected_dog: {
@@ -2545,7 +2814,7 @@ const MONSTERS = {
         emoji: '🐕',
         description: '광견병을 조심할 것!',
         possibleTraits: [
-            { id: 'rabies_1', chance: 1.0 }
+            { id: 'rabies', chance: 1.0, level: 1 }
         ]
     },
     zombie: {
@@ -2560,7 +2829,7 @@ const MONSTERS = {
         emoji: '🧟‍♂️',
         description: '마법공격에 취약하다.',
         possibleTraits: [
-            { id: 'infection_1', chance: 0.5 }
+            { id: 'infection_trait', chance: 0.5, level: 1 }
         ]
     },
     goblin: {
@@ -2609,8 +2878,10 @@ const MONSTERS = {
         emoji: '🏹',
         description: '지원요청 특성을 주의할 것!',
         skills: [{
-            id: 'multishot_1',
+            id: 'multishot',
             name: '멀티샷',
+            skillRef: 'multishot',
+            level: 1,
             cooldown: 2,
             description: '여러 발의 화살을 동시에 발사한다.',
             effect: { type: 'multi_attack', attackCount: 2, damagePercent: 100 }
@@ -2637,23 +2908,26 @@ const MONSTERS = {
         description: '제법 강하니 조심할 것',
         skills: [
             {
-                id: 'smash_1',
-                name: '강타',
+                id: 'smash',
+                name: '강타 Lv.1',
+                skillRef: 'smash',
+                level: 1,
                 cooldown: 2,
                 description: '강력한 일격을 가한다.',
-                effect: { type: 'damage', damagePercent: 200, statusEffect: 'stun', statusDuration: 1 }
+                effect: { type: 'damage', damagePercent: 200, statusEffect: 'confusion', statusDuration: 2 }
             },
             {
-                id: 'guard_1',
-                name: '수호',
+                id: 'guard',
+                name: '수호 Lv.1',
+                skillRef: 'guard',
+                level: 1,
                 cooldown: 4,
-                description: '방어 태세를 취하여 받는 피해를 줄인다.',
-                effect: { type: 'buff', buffType: 'defense', defenseBonus: 50, duration: 2 }
+                description: '방어 태세를 취하여 아군을 보호한다.',
+                effect: { type: 'buff', buffType: 'guard', allyDamageReduction: 50, redirectPercent: 75, duration: 3 }
             }
         ],
         possibleTraits: [
-            { id: 'summon_call', chance: 1.0 },
-            { id: 'guard_skill', chance: 0.5 }
+            { id: 'summon_call', chance: 1.0, level: 1 }
         ]
     },
 
@@ -2679,8 +2953,10 @@ const MONSTERS = {
         description: '저주를 받아 흑마법사로 바뀌어버린 영주입니다.',
         skills: [
             {
-                id: 'summon_undead',
+                id: 'summon',
                 name: '소환',
+                skillRef: 'summon',
+                level: 1,
                 cooldown: 3,
                 description: '저주받은 영주가 언데드를 소환합니다.',
                 effect: {
@@ -2688,24 +2964,28 @@ const MONSTERS = {
                     summonId: 'zombie',
                     countChances: [
                         { count: 1, chance: 0.5 },
-                        { count: 2, chance: 0.3 },
-                        { count: 3, chance: 0.2 }
+                        { count: 2, chance: 0.35 },
+                        { count: 3, chance: 0.15 }
                     ]
                 }
             },
             {
                 id: 'plague_curse',
                 name: '역병의 저주',
+                skillRef: 'plague_curse',
+                level: 3,
                 cooldown: 4,
                 description: '대상에게 역병의 저주를 걸어 지속 피해를 입힌다.',
-                effect: { type: 'dot', damagePercent: 15, duration: 3, damageType: 'magical' }
+                effect: { type: 'curse', statusEffect: 'plague', statusDuration: 3, ignoreEvasion: true, resistible: true }
             },
             {
                 id: 'weakness_curse',
                 name: '약화의 저주',
-                cooldown: 5,
+                skillRef: 'weakness_curse',
+                level: 3,
+                cooldown: 4,
                 description: '대상의 공격력과 방어력을 감소시킨다.',
-                effect: { type: 'debuff', atkReduction: 20, defReduction: 20, duration: 3 }
+                effect: { type: 'curse', statusEffect: 'weakness', statusDuration: 3, ignoreEvasion: true, resistible: true }
             }
         ]
     },
@@ -2738,9 +3018,11 @@ const MONSTERS = {
         skills: [{
             id: 'web_bind',
             name: '거미줄 속박',
+            skillRef: 'web_bind',
+            level: 1,
             cooldown: 3,
             description: '거미줄로 대상을 속박하여 행동을 제한한다.',
-            effect: { type: 'status', statusEffect: 'stun', statusDuration: 1 }
+            effect: { type: 'damage_status', damagePercent: 100, statusEffect: 'bind', statusDuration: 2 }
         }]
     },
     skeleton: {
@@ -2770,14 +3052,16 @@ const MONSTERS = {
         emoji: '🧟',
         description: '좀비보다 강력한 언데드다. 마법에 취약하다.',
         skills: [{
-            id: 'flesh_explosion_2',
+            id: 'flesh_explosion',
             name: '살점폭파 Lv.2',
+            skillRef: 'flesh_explosion',
+            level: 2,
             cooldown: 3,
             description: '부패한 살점을 폭파시켜 주변에 피해를 준다.',
-            effect: { type: 'aoe_damage', damageMultiplier: 1.3 }
+            effect: { type: 'hp_cost_damage', hpCostPercent: 20, damagePercent: 80, bonusHpDamagePercent: 50, useHigherAtk: true, cooldownDebuff: { atkReduction: 20 } }
         }],
         possibleTraits: [
-            { id: 'infection_2', chance: 0.8 }
+            { id: 'infection_trait', chance: 0.8, level: 2 }
         ]
     },
     orc: {
@@ -2808,14 +3092,16 @@ const MONSTERS = {
         emoji: '👻',
         description: '회피율이 높고, 마법 공격으로 상대하는것이 좋다.',
         skills: [{
-            id: 'confusion_curse_3',
+            id: 'confusion_curse',
             name: '혼란의 저주 Lv.3',
-            cooldown: 3,
+            skillRef: 'confusion_curse',
+            level: 3,
+            cooldown: 4,
             description: '대상에게 강력한 혼란 상태를 부여한다.',
-            effect: { type: 'status', statusEffect: 'confusion', statusDuration: 3 }
+            effect: { type: 'curse', statusEffect: 'confusion', statusDuration: 3, ignoreEvasion: true, resistible: true }
         }],
         possibleTraits: [
-            { id: 'spirit_body_3', chance: 1.0 }
+            { id: 'spirit_body', chance: 1.0, level: 3 }
         ]
     },
     slime: {
@@ -2830,7 +3116,7 @@ const MONSTERS = {
         emoji: '🟢',
         description: 'HP가 0이될시 두 마리의 작은 슬라임으로 분열한다.',
         possibleTraits: [
-            { id: 'split', chance: 1.0 }
+            { id: 'split', chance: 1.0, level: 1 }
         ]
     },
     small_slime: {
@@ -2878,24 +3164,29 @@ const MONSTERS = {
             { item: 'shining_bone', chance: 0.15 }
         ],
         emoji: '💀🔥',
+        description: '스켈레톤 메이지 딸로 스켈레톤 메이지는 파이어볼 또는 라이트닝볼트 중 랜덤 1개 보유합니다.',
         description: '마법공격을 한다.',
         // 파이어볼 또는 라이트닝볼트 중 랜덤 1개 보유
         skillPool: [
             {
-                id: 'fireball_monster',
+                id: 'fireball',
                 name: '파이어볼',
+                skillRef: 'fireball',
+                level: 2,
                 cooldown: 3,
                 description: '마법 화염을 발사한다.',
                 damageType: 'magical',
                 effect: { type: 'damage', damagePercent: 200, statusEffect: 'burn', statusDuration: 2 }
             },
             {
-                id: 'lightning_bolt_monster',
+                id: 'lightning_bolt',
                 name: '라이트닝볼트',
+                skillRef: 'lightning_bolt',
+                level: 2,
                 cooldown: 3,
                 description: '번개를 소환하여 공격한다.',
                 damageType: 'magical',
-                effect: { type: 'damage', damagePercent: 270, statusEffect: 'shock', statusDuration: 1 }
+                effect: { type: 'damage', damagePercent: 270, statusEffect: 'shock', statusDuration: 2 }
             }
         ],
         randomSkillCount: 1  // skillPool에서 랜덤 1개 선택
@@ -2923,22 +3214,26 @@ const MONSTERS = {
         description: '고대의 유적을 지키고있는 신비한 몬스터입니다.',
         skills: [
             {
-                id: 'spirit_sword_2',
+                id: 'spirit_sword',
                 name: '투지의 검 Lv.2',
+                skillRef: 'spirit_sword',
+                level: 2,
                 cooldown: 2,
                 description: '투지의 검으로 공격력을 올리고 흡혈한다.',
-                effect: { type: 'buff', buffType: 'attack', pAtkBonus: 10, lifestealPercent: 15, duration: 3 }
+                effect: { type: 'buff', buffType: 'attack', pAtkPercent: 5, pAtkFlat: 10, lifestealPercent: 10, noTurnEndChance: 50, duration: 3 }
             },
             {
-                id: 'smash_3',
+                id: 'smash',
                 name: '강타 Lv.3',
+                skillRef: 'smash',
+                level: 3,
                 cooldown: 2,
                 description: '강력한 일격으로 적에게 큰 피해를 준다.',
-                effect: { type: 'damage', damagePercent: 250, statusEffect: 'stun', statusDuration: 1 }
+                effect: { type: 'damage', damagePercent: 240, statusEffect: 'confusion', statusDuration: 2 }
             }
         ],
         possibleTraits: [
-            { id: 'unyielding_2', chance: 1.0 }
+            { id: 'unyielding', chance: 1.0, level: 2 }
         ]
     },
 
@@ -2965,30 +3260,36 @@ const MONSTERS = {
         description: '고대의 유적을 지키고있는 신비한 몬스터입니다.',
         skills: [
             {
-                id: 'spirit_sword_5',
+                id: 'spirit_sword',
                 name: '투지의 검 Lv.5',
+                skillRef: 'spirit_sword',
+                level: 5,
                 cooldown: 2,
                 description: '투지의 힘으로 공격력을 올리고 흡혈한다.',
-                effect: { type: 'buff', buffType: 'attack', pAtkBonus: 25, lifestealPercent: 20, duration: 3 }
+                effect: { type: 'buff', buffType: 'attack', pAtkPercent: 5, pAtkFlat: 10, lifestealPercent: 10, noTurnEndChance: 50, duration: 4 }
             },
             {
-                id: 'smash_5',
+                id: 'smash',
                 name: '강타 Lv.5',
+                skillRef: 'smash',
+                level: 5,
                 cooldown: 2,
                 description: '매우 강력한 일격을 가한다.',
-                effect: { type: 'damage', damagePercent: 300, statusEffect: 'stun', statusDuration: 1 }
+                effect: { type: 'damage', damagePercent: 280, statusEffect: 'confusion', confusionLevel: 3, statusDuration: 2 }
             },
             {
-                id: 'doom_strike_3',
+                id: 'doom_strike',
                 name: '멸망의 일격 Lv.3',
+                skillRef: 'doom_strike',
+                level: 3,
                 cooldown: 5,
                 description: '전신의 힘을 모아 파괴적인 일격을 가한다.',
-                effect: { type: 'damage', damagePercent: 500 }
+                effect: { type: 'mixed_damage', pAtkPercent: 300, mAtkPercent: 200, lostHpPercent: 25, physicalRatio: 70, magicalRatio: 30, statusEffect: 'stun', statusDuration: 1 }
             }
         ],
         possibleTraits: [
-            { id: 'unyielding_5', chance: 1.0 },
-            { id: 'counter_5', chance: 1.0 }
+            { id: 'unyielding', chance: 1.0, level: 5 },
+            { id: 'counter', chance: 1.0, level: 5 }
         ]
     },
     cave_troll: {
@@ -3013,32 +3314,42 @@ const MONSTERS = {
         description: '부족에서 추방당해 동굴에서 살고있는 흉폭한 트롤전사입니다.',
         skills: [
             {
-                id: 'roar_3',
+                id: 'roar',
                 name: '포효 Lv.3',
+                skillRef: 'roar',
+                level: 3,
                 cooldown: 4,
                 description: '트롤이 포효하여 공격력을 높인다.',
-                effect: { type: 'buff', buffType: 'attack', pAtkBonus: 20, duration: 3 }
+                effect: { type: 'buff', buffType: 'attack', pAtkPercent: 10, mAtkPercent: 10, tauntAll: true, duration: 3 }
             },
             {
-                id: 'smash_4',
+                id: 'smash',
                 name: '강타 Lv.4',
+                skillRef: 'smash',
+                level: 4,
                 cooldown: 2,
                 description: '트롤의 강력한 일격.',
-                effect: { type: 'damage', damagePercent: 250, statusEffect: 'stun', statusDuration: 1 }
+                effect: { type: 'damage', damagePercent: 260, statusEffect: 'confusion', confusionLevel: 2, statusDuration: 2 }
             },
             {
-                id: 'earth_smash_3',
+                id: 'earth_smash',
                 name: '대지강타 Lv.3',
-                cooldown: 3,
+                skillRef: 'earth_smash',
+                level: 3,
+                cooldown: 4,
                 description: '트롤이 땅을 내리쳐 강력한 진동을 일으킵니다.',
                 effect: {
-                    type: 'aoe_damage',
-                    damageMultiplier: 1.5
+                    type: 'splash_damage',
+                    damagePercent: 360,
+                    statusEffect: 'confusion',
+                    statusDuration: 2,
+                    splashPercent: 30,
+                    splashStatusDuration: 1
                 }
             }
         ],
         possibleTraits: [
-            { id: 'regeneration_4', chance: 1.0 }
+            { id: 'regeneration', chance: 1.0, level: 4 }
         ]
     },
 
@@ -3773,13 +4084,40 @@ const MONSTERS = {
         ],
         emoji: '👿',
         isBoss: true,
-        skills: [{
-            id: 'hell_fire',
-            name: '지옥의 불꽃',
-            cooldown: 3,
-            description: '마왕이 지옥의 불꽃을 소환하여 모든 것을 태운다.',
-            effect: { type: 'aoe_damage', damageMultiplier: 3.0 }
-        }]
+        skills: [
+            {
+                id: 'hell_fire',
+                name: '지옥의 불꽃',
+                skillRef: 'fireball',
+                level: 10,
+                cooldown: 3,
+                description: '마왕이 지옥의 불꽃을 소환하여 모든 것을 태운다.',
+                damageType: 'magical',
+                effect: { type: 'splash_damage', damagePercent: 500, statusEffect: 'burn', statusDuration: 3, splashPercent: 50, splashStatusDuration: 2 }
+            },
+            {
+                id: 'darkness_curse',
+                name: '어둠의 저주',
+                skillRef: 'darkness_curse',
+                level: 8,
+                cooldown: 4,
+                description: '마왕의 어둠이 적의 시야를 빼앗는다.',
+                effect: { type: 'curse', statusEffect: 'blind', statusDuration: 3, ignoreEvasion: true, resistible: false }
+            },
+            {
+                id: 'doom_strike',
+                name: '멸망의 일격',
+                skillRef: 'doom_strike',
+                level: 8,
+                cooldown: 5,
+                description: '전신의 마력을 모아 파괴적인 일격을 가한다.',
+                effect: { type: 'mixed_damage', pAtkPercent: 400, mAtkPercent: 400, lostHpPercent: 30, physicalRatio: 50, magicalRatio: 50, statusEffect: 'stun', statusDuration: 2 }
+            }
+        ],
+        possibleTraits: [
+            { id: 'unyielding', chance: 1.0, level: 10 },
+            { id: 'regeneration', chance: 1.0, level: 8 }
+        ]
     },
 
     // ===== 대련용 교관 몬스터 =====
@@ -3800,8 +4138,11 @@ const MONSTERS = {
         image: 'assets/monsters/spar_instructor2.jpg',
         isSpar: true,
         sparClass: 'archer',
-        trait: 'hawks_eye',
-        skills: ['multishot', 'charge_shot'],
+        trait: { id: 'hawks_eye', level: 3 },
+        skills: [
+            { skillRef: 'multishot', level: 3 },
+            { skillRef: 'charge_shot', level: 3 }
+        ],
         aiPattern: {
             attack: 60,
             skill: 30,
@@ -3832,8 +4173,11 @@ const MONSTERS = {
         image: 'assets/monsters/spar_instructor3.jpg',
         isSpar: true,
         sparClass: 'mage',
-        trait: 'meditation',
-        skills: ['fireball', 'lightning_bolt'],
+        trait: { id: 'meditation', level: 4 },
+        skills: [
+            { skillRef: 'fireball', level: 4 },
+            { skillRef: 'lightning_bolt', level: 4 }
+        ],
         damageType: 'magical',
         aiPattern: {
             attack: 60,
@@ -3865,8 +4209,11 @@ const MONSTERS = {
         image: 'assets/monsters/spar_instructor4.jpg',
         isSpar: true,
         sparClass: 'skirmisher',
-        trait: 'swift',
-        skills: ['rapid_slash', 'ambush'],
+        trait: { id: 'swift', level: 5 },
+        skills: [
+            { skillRef: 'rapid_slash', level: 5 },
+            { skillRef: 'ambush', level: 5 }
+        ],
         aiPattern: {
             attack: 60,
             skill: 30,
@@ -3898,8 +4245,11 @@ const MONSTERS = {
         phase2Image: 'assets/monsters/spar_senior_instructor_phase2.jpg',
         isSpar: true,
         sparClass: 'warrior',
-        trait: 'unyielding',
-        skills: ['smash', 'spirit_sword'],
+        trait: { id: 'unyielding', level: 6 },
+        skills: [
+            { skillRef: 'smash', level: 6 },
+            { skillRef: 'spirit_sword', level: 6 }
+        ],
         aiPattern: {
             attack: 60,
             skill: 30,

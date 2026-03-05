@@ -287,9 +287,9 @@ function moveToLocation(locationId) {
         return false;
     }
 
-    // 보스방 진입 경고 체크
+    // 보스방 진입 경고 체크 (고대유적은 정식 보스가 아니므로 경고 제외)
     const targetLoc = map.locations[resolvedLocationId];
-    if (targetLoc && targetLoc.isBossArea) {
+    if (targetLoc && targetLoc.isBossArea && !targetLoc.isAncientRuinsEncounter) {
         // 첫 진입 여부 확인
         const bossKey = `${map.id}_${resolvedLocationId}_boss_warned`;
         if (!player.bossWarnings) player.bossWarnings = {};
